@@ -1,0 +1,337 @@
+package scanner
+
+import (
+	"context"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
+)
+
+// Progress is emitted live during scanning.
+type Progress struct {
+	CurrentPath string
+	BytesSeen   int64
+	FilesSeen   int64
+	ItemsFound  int
+	Done        bool
+}
+
+// Config controls a scan.
+type Config struct {
+	// ProjectRoots overrides DefaultProjectRoots if non-empty.
+	ProjectRoots []string
+	// MinSize: items smaller than this are dropped from the result.
+	MinSize int64
+	// Workers caps the number of concurrent du workers (>=1).
+	Workers int
+	// SkipProjectScan turns off project-root artifact discovery.
+	SkipProjectScan bool
+}
+
+// Default returns a sensible default Config.
+func Default() Config {
+	return Config{
+		MinSize: 50 * 1024 * 1024, // 50 MiB floor
+		Workers: 6,
+	}
+}
+
+// Scan inspects the filesystem and emits Progress updates on progress until
+// done. The returned slice is sorted by size descending.
+//
+// progress may be nil. It is closed when the scan completes.
+func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, error) {
+	if cfg.Workers < 1 {
+		cfg.Workers = 1
+	}
+	if progress != nil {
+		defer close(progress)
+	}
+
+	// Build the task list: preset paths (possibly expanded), plus project
+	// artifact scans rooted at user dev directories.
+	type task struct {
+		path        string
+		category    Category
+		safety      Safety
+		description string
+		source      string
+	}
+	var tasks []task
+
+	for _, p := range Presets {
+		expanded, ok := expandHome(p.Path)
+		if !ok {
+			continue
+		}
+		info, err := os.Lstat(expanded)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		if p.ExpandChildren {
+			entries, err := os.ReadDir(expanded)
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
+				tasks = append(tasks, task{
+					path:        filepath.Join(expanded, e.Name()),
+					category:    p.Category,
+					safety:      p.Safety,
+					description: p.Description,
+					source:      p.Source,
+				})
+			}
+		} else {
+			tasks = append(tasks, task{
+				path:        expanded,
+				category:    p.Category,
+				safety:      p.Safety,
+				description: p.Description,
+				source:      p.Source,
+			})
+		}
+	}
+
+	// Project artifact roots: collected up-front so we can du them like presets.
+	if !cfg.SkipProjectScan {
+		roots := cfg.ProjectRoots
+		if len(roots) == 0 {
+			roots = DefaultProjectRoots
+		}
+		patternByName := make(map[string]ProjectArtifact, len(ProjectArtifactPatterns))
+		for _, p := range ProjectArtifactPatterns {
+			patternByName[p.Name] = p
+		}
+		matches := findArtifacts(ctx, roots, patternByName, progress)
+		for _, m := range matches {
+			pat := patternByName[filepath.Base(m)]
+			tasks = append(tasks, task{
+				path:        m,
+				category:    pat.Category,
+				safety:      pat.Safety,
+				description: pat.Description,
+				source:      "artifact:" + pat.Name,
+			})
+		}
+	}
+
+	// Now du each task concurrently.
+	var (
+		mu       sync.Mutex
+		items    []Item
+		bytes    atomic.Int64
+		files    atomic.Int64
+		jobs     = make(chan task)
+		wg       sync.WaitGroup
+		emitOnce sync.Mutex
+	)
+
+	emit := func(current string) {
+		if progress == nil {
+			return
+		}
+		emitOnce.Lock()
+		select {
+		case progress <- Progress{
+			CurrentPath: current,
+			BytesSeen:   bytes.Load(),
+			FilesSeen:   files.Load(),
+			ItemsFound:  len(items),
+		}:
+		default:
+		}
+		emitOnce.Unlock()
+	}
+
+	for i := 0; i < cfg.Workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for t := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				emit(t.path)
+				size, count, mt := du(ctx, t.path)
+				bytes.Add(size)
+				files.Add(count)
+				if size < cfg.MinSize {
+					continue
+				}
+				mu.Lock()
+				items = append(items, Item{
+					Path:        t.path,
+					Size:        size,
+					FileCount:   count,
+					ModTime:     mt,
+					Category:    t.category,
+					Safety:      t.safety,
+					Description: t.description,
+					Source:      t.source,
+				})
+				mu.Unlock()
+				emit(t.path)
+			}
+		}()
+	}
+	for _, t := range tasks {
+		select {
+		case <-ctx.Done():
+			break
+		case jobs <- t:
+		}
+	}
+	close(jobs)
+	wg.Wait()
+
+	sort.Slice(items, func(i, j int) bool { return items[i].Size > items[j].Size })
+
+	if progress != nil {
+		emitOnce.Lock()
+		select {
+		case progress <- Progress{
+			BytesSeen:  bytes.Load(),
+			FilesSeen:  files.Load(),
+			ItemsFound: len(items),
+			Done:       true,
+		}:
+		default:
+		}
+		emitOnce.Unlock()
+	}
+
+	return items, ctx.Err()
+}
+
+// du recursively sums the size of path. Returns (bytes, files, mostRecentMtime).
+//
+// Errors are swallowed: a permission-denied subtree just contributes zero.
+func du(ctx context.Context, path string) (int64, int64, time.Time) {
+	var (
+		total int64
+		count int64
+		mod   time.Time
+	)
+	_ = filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return filepath.SkipAll
+		}
+		if err != nil {
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
+		total += diskBytes(info)
+		count++
+		if mt := info.ModTime(); mt.After(mod) {
+			mod = mt
+		}
+		return nil
+	})
+	return total, count, mod
+}
+
+// findArtifacts walks roots looking for directories whose basename matches
+// one of the configured project artifact patterns. When a match is found,
+// the walker does not descend into it (so we count node_modules without
+// walking into nested node_modules).
+func findArtifacts(ctx context.Context, roots []string, patterns map[string]ProjectArtifact, progress chan<- Progress) []string {
+	var (
+		found []string
+		mu    sync.Mutex
+	)
+	for _, root := range roots {
+		expanded, ok := expandHome(root)
+		if !ok {
+			continue
+		}
+		if _, err := os.Stat(expanded); err != nil {
+			continue
+		}
+		if progress != nil {
+			select {
+			case progress <- Progress{CurrentPath: "scanning " + expanded}:
+			default:
+			}
+		}
+		_ = filepath.WalkDir(expanded, func(p string, d fs.DirEntry, err error) error {
+			if ctx.Err() != nil {
+				return filepath.SkipAll
+			}
+			if err != nil {
+				if d != nil && d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !d.IsDir() {
+				return nil
+			}
+			// Skip dot-dirs at root level except those we explicitly want.
+			base := d.Name()
+			if _, hit := patterns[base]; hit {
+				mu.Lock()
+				found = append(found, p)
+				mu.Unlock()
+				return filepath.SkipDir
+			}
+			// Don't descend into VCS metadata.
+			if base == ".git" || base == ".svn" || base == ".hg" {
+				return filepath.SkipDir
+			}
+			return nil
+		})
+	}
+	return found
+}
+
+// diskBytes returns the actual on-disk size in bytes for the given file.
+// On macOS/Linux this is `st_blocks * 512`, which correctly accounts for
+// sparse files (the OrbStack/Apple-Container disk image trick). Falls back
+// to logical Size() on non-unix platforms.
+func diskBytes(info fs.FileInfo) int64 {
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		// st.Blocks is number of 512-byte blocks actually allocated.
+		return int64(st.Blocks) * 512
+	}
+	return info.Size()
+}
+
+// expandHome replaces a leading "~" with the user's home directory.
+func expandHome(path string) (string, bool) {
+	if !strings.HasPrefix(path, "~") {
+		return path, true
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", false
+	}
+	if path == "~" {
+		return home, true
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(home, path[2:]), true
+	}
+	return path, true
+}

@@ -1,0 +1,64 @@
+# hand-clean
+
+An interactive macOS disk cleanup CLI.
+
+`hand-clean` scans the well-known noisy paths on a macOS dev machine — Xcode
+DerivedData, iOS DeviceSupport, language caches, project build artifacts,
+container VM data — shows them in a multi-select TUI, and lets you delete
+selected items safely (move-to-Trash by default).
+
+## Install
+
+```sh
+go install ./...   # or
+make install       # copies binary to ~/.local/bin/hand-clean
+```
+
+Requires Go 1.21+.
+
+## Usage
+
+```sh
+hand-clean                 # interactive TUI
+hand-clean --dry-run       # preview what would be deleted
+hand-clean --rm            # delete directly (skip Trash, unrecoverable)
+hand-clean --min=200M      # ignore items smaller than 200 MiB
+hand-clean --roots=~/work  # project scan roots (default: ~/dev ~/Projects ~/Code ~/workspace)
+hand-clean --no-projects   # skip project artifact scan
+```
+
+## Key bindings
+
+| Key | Action |
+|---|---|
+| j / ↓, k / ↑ | navigate |
+| g / G | jump to top / bottom |
+| space | toggle selection |
+| a | toggle whole group |
+| A | toggle all auto-safe items |
+| c | clear selection |
+| enter | collapse / expand group |
+| d | delete selected (with confirm) |
+| q / Ctrl-C | quit |
+| ? | help |
+
+## Safety levels
+
+| Badge | Meaning |
+|---|---|
+| `safe`   | Regenerable cache. Deleting costs only rebuild time. |
+| `review` | Project artifacts / large stores. Restorable but worth a glance. |
+| `hold`   | User data or live state (Downloads, container data). Confirm carefully. |
+
+## What it scans
+
+- Xcode DerivedData, iOS / watchOS / tvOS DeviceSupport, Archives, CoreSimulator caches
+- Language caches: `go-build`, Cargo, npm, pnpm, yarn, gradle, maven, SwiftPM
+- Tool caches: Playwright, Cypress, JetBrains, Homebrew, Codex, `~/.cache/*`
+- Per-app `~/Library/Caches/*`, `~/Library/Logs/*`, `~/Library/Containers/*`
+- VM data: OrbStack, Apple Container, Claude vm_bundles, Docker
+- Trash, Downloads
+- Project artifacts under `~/dev` / `~/Projects` / `~/Code` / `~/workspace`:
+  `node_modules`, `target`, `build`, `.build`, `dist`, `.next`, `.nuxt`,
+  `.turbo`, `.parcel-cache`, `.gradle`, `.dart_tool`, `DerivedData`, `Pods`,
+  `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `venv`, `.venv`
