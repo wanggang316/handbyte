@@ -1,27 +1,50 @@
-// Copy-to-clipboard for install command buttons.
-document.querySelectorAll('.copy-btn').forEach((btn) => {
+// Copy install command on click.
+document.querySelectorAll('.cmd[data-copy]').forEach((btn) => {
   btn.addEventListener('click', async () => {
-    const target = document.querySelector(btn.dataset.copy);
-    if (!target) return;
-    const text = target.textContent.trim();
+    const text = btn.querySelector('.cmd__text')?.textContent?.trim();
+    if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      const range = document.createRange();
-      range.selectNodeContents(target);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
       document.execCommand('copy');
-      sel.removeAllRanges();
+      document.body.removeChild(ta);
     }
-    const label = btn.querySelector('.copy-btn__text');
-    const prev = label.textContent;
     btn.classList.add('is-copied');
-    label.textContent = 'Copied';
-    setTimeout(() => {
-      btn.classList.remove('is-copied');
-      label.textContent = prev;
-    }, 1600);
+    clearTimeout(btn._t);
+    btn._t = setTimeout(() => btn.classList.remove('is-copied'), 1600);
   });
 });
+
+// Animate stat counters when they enter the viewport.
+const ease = (t) => 1 - Math.pow(1 - t, 3);
+const counters = document.querySelectorAll('[data-counter]');
+const animate = (el) => {
+  const target = parseFloat(el.dataset.counter);
+  if (Number.isNaN(target)) return;
+  const decimals = (el.dataset.counter.split('.')[1] || '').length;
+  const duration = 1100;
+  const start = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - start) / duration);
+    const v = target * ease(p);
+    el.textContent = decimals ? v.toFixed(decimals) : Math.round(v).toString();
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+};
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) { animate(e.target); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.3 });
+  counters.forEach((c) => io.observe(c));
+} else {
+  counters.forEach(animate);
+}
