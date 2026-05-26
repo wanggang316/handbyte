@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# hand-clean installer.
+# handbyte installer.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/wanggang316/hand-clean/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/wanggang316/handbyte/main/install.sh | bash
 #   curl -fsSL .../install.sh | VERSION=v0.2.0 bash
 #   curl -fsSL .../install.sh | PREFIX=$HOME/.local bash
 #
 # Env:
-#   REPO    GitHub repo (default: wanggang316/hand-clean)
+#   REPO    GitHub repo (default: wanggang316/handbyte)
 #   VERSION Release tag to install (default: latest)
 #   PREFIX  Install prefix; binary goes to $PREFIX/bin (default: /usr/local)
 
 set -euo pipefail
 
-REPO="${REPO:-wanggang316/hand-clean}"
+REPO="${REPO:-wanggang316/handbyte}"
 VERSION="${VERSION:-latest}"
 PREFIX="${PREFIX:-/usr/local}"
 BIN_DIR="${PREFIX}/bin"
@@ -23,7 +23,7 @@ info() { printf '\033[32m==>\033[0m %s\n' "$*"; }
 
 # ---- platform check ---------------------------------------------------------
 OS="$(uname -s)"
-[ "$OS" = "Darwin" ] || err "hand-clean only supports macOS (got $OS)"
+[ "$OS" = "Darwin" ] || err "handbyte only supports macOS (got $OS)"
 
 case "$(uname -m)" in
   arm64)  ARCH=arm64 ;;
@@ -43,7 +43,7 @@ if [ "$VERSION" = "latest" ]; then
   [ -n "$VERSION" ] || err "could not resolve latest version (set VERSION=v… explicitly)"
 fi
 
-ARCHIVE="hand-clean_${VERSION}_darwin_${ARCH}.tar.gz"
+ARCHIVE="handbyte_${VERSION}_darwin_${ARCH}.tar.gz"
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 ARCHIVE_URL="${BASE_URL}/${ARCHIVE}"
 CHECKSUMS_URL="${BASE_URL}/checksums.txt"
@@ -69,8 +69,8 @@ fi
 # ---- extract & install ------------------------------------------------------
 info "extracting"
 tar -xzf "${TMP}/${ARCHIVE}" -C "$TMP"
-[ -f "${TMP}/hand-clean" ] || err "archive did not contain hand-clean binary"
-chmod +x "${TMP}/hand-clean"
+[ -f "${TMP}/handbyte" ] || err "archive did not contain handbyte binary"
+chmod +x "${TMP}/handbyte"
 
 SUDO=""
 if [ ! -w "$BIN_DIR" ]; then
@@ -87,12 +87,12 @@ if [ ! -w "$BIN_DIR" ]; then
 fi
 
 $SUDO mkdir -p "$BIN_DIR"
-$SUDO install -m 0755 "${TMP}/hand-clean" "${BIN_DIR}/hand-clean"
+$SUDO install -m 0755 "${TMP}/handbyte" "${BIN_DIR}/handbyte"
 
-info "installed: ${BIN_DIR}/hand-clean (${VERSION}, darwin/${ARCH})"
+info "installed: ${BIN_DIR}/handbyte (${VERSION}, darwin/${ARCH})"
 
-if ! command -v hand-clean >/dev/null 2>&1; then
+if ! command -v handbyte >/dev/null 2>&1; then
   printf '\033[33mnote:\033[0m %s is not on your PATH; add it to your shell rc.\n' "$BIN_DIR" >&2
 fi
 
-"${BIN_DIR}/hand-clean" -h 2>&1 | head -1 || true
+"${BIN_DIR}/handbyte" -h 2>&1 | head -1 || true

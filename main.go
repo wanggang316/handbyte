@@ -1,14 +1,14 @@
-// hand-clean is an interactive macOS disk cleanup CLI.
+// handbyte is an interactive macOS disk cleanup CLI.
 //
 // Usage:
 //
-//	hand-clean                run interactive TUI (move-to-Trash on confirm)
-//	hand-clean --rm           use rm -rf instead of Trash (unrecoverable)
-//	hand-clean --dry-run      preview deletions only
-//	hand-clean --min=200M     drop items smaller than this from the list
-//	hand-clean --roots=p1,p2  override project-scan roots (default ~/dev …)
-//	hand-clean --no-projects  skip the project artifact scan entirely
-//	hand-clean --workers=8    cap concurrent du workers
+//	handbyte                run interactive TUI (move-to-Trash on confirm)
+//	handbyte --rm           use rm -rf instead of Trash (unrecoverable)
+//	handbyte --dry-run      preview deletions only
+//	handbyte --min=200M     drop items smaller than this from the list
+//	handbyte --roots=p1,p2  override project-scan roots (default ~/dev …)
+//	handbyte --no-projects  skip the project artifact scan entirely
+//	handbyte --workers=8    cap concurrent du workers
 package main
 
 import (
@@ -21,9 +21,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/wanggang316/hand-clean/internal/cleaner"
-	"github.com/wanggang316/hand-clean/internal/scanner"
-	"github.com/wanggang316/hand-clean/internal/ui"
+	"github.com/wanggang316/handbyte/internal/cleaner"
+	"github.com/wanggang316/handbyte/internal/scanner"
+	"github.com/wanggang316/handbyte/internal/ui"
 )
 
 func main() {

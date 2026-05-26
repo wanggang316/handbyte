@@ -1,6 +1,6 @@
 .PHONY: build install run tidy clean
 
-BIN := hand-clean
+BIN := handbyte
 
 build:
 	go build -o $(BIN) .

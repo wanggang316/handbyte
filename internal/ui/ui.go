@@ -1,4 +1,4 @@
-// Package ui implements the hand-clean Bubble Tea TUI.
+// Package ui implements the handbyte Bubble Tea TUI.
 package ui
 
 import (
@@ -12,8 +12,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/wanggang316/hand-clean/internal/cleaner"
-	"github.com/wanggang316/hand-clean/internal/scanner"
+	"github.com/wanggang316/handbyte/internal/cleaner"
+	"github.com/wanggang316/handbyte/internal/scanner"
 )
 
 // phase tracks which screen is currently rendered.
@@ -475,7 +475,7 @@ func (m *Model) View() string {
 }
 
 func (m *Model) renderSplash() string {
-	title := titleStyle.Render("hand-clean")
+	title := titleStyle.Render("handbyte")
 	sub := mutedStyle.Render("macOS disk cleanup, with eyes open.")
 	modeLabel := "move to Trash"
 	switch m.cleanMode {
@@ -499,7 +499,7 @@ func (m *Model) renderSplash() string {
 }
 
 func (m *Model) renderScanning() string {
-	header := titleStyle.Render("hand-clean") + "  " + mutedStyle.Render("scanning…")
+	header := titleStyle.Render("handbyte") + "  " + mutedStyle.Render("scanning…")
 	stats := fmt.Sprintf(
 		"  %s   %s in %s files, %d items so far",
 		m.spin.View(),
@@ -526,7 +526,7 @@ func (m *Model) renderHeader() string {
 	for _, it := range m.items {
 		total += it.Size
 	}
-	left := titleStyle.Render("hand-clean") + "  " +
+	left := titleStyle.Render("handbyte") + "  " +
 		mutedStyle.Render(fmt.Sprintf("%d items, %s found", totalCount, humanBytes(total)))
 	right := ""
 	if selCount > 0 {
@@ -667,7 +667,7 @@ func (m *Model) renderConfirm() string {
 }
 
 func (m *Model) renderCleaning() string {
-	header := titleStyle.Render("hand-clean") + "  " + mutedStyle.Render("cleaning…")
+	header := titleStyle.Render("handbyte") + "  " + mutedStyle.Render("cleaning…")
 	pct := 0.0
 	if m.cleanProg.Total > 0 {
 		pct = float64(m.cleanProg.Completed) / float64(m.cleanProg.Total)
@@ -694,7 +694,7 @@ func (m *Model) renderDone() string {
 	}
 	title := accentStyle.Render("✓ done")
 	lines := []string{
-		titleStyle.Render("hand-clean") + "  " + title,
+		titleStyle.Render("handbyte") + "  " + title,
 		"",
 		fmt.Sprintf("  cleaned %d items", len(m.cleanRes)-failed),
 		fmt.Sprintf("  freed   %s", accentStyle.Render(humanBytes(freed))),
@@ -708,7 +708,7 @@ func (m *Model) renderDone() string {
 
 func (m *Model) renderHelp() string {
 	lines := []string{
-		titleStyle.Render("hand-clean help"),
+		titleStyle.Render("handbyte help"),
 		"",
 		"  j/↓  k/↑       navigate",
 		"  g G            jump to top / bottom",

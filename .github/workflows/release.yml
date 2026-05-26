@@ -31,20 +31,20 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           mkdir -p dist
-          go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/hand-clean .
+          go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/handbyte .
 
       - name: Package
         run: |
           cd dist
-          ARCHIVE="hand-clean_${GITHUB_REF_NAME}_darwin_${{ matrix.goarch }}.tar.gz"
-          tar -czf "${ARCHIVE}" hand-clean
+          ARCHIVE="handbyte_${GITHUB_REF_NAME}_darwin_${{ matrix.goarch }}.tar.gz"
+          tar -czf "${ARCHIVE}" handbyte
           shasum -a 256 "${ARCHIVE}" > "${ARCHIVE}.sha256"
           ls -la
 
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.goarch }}
-          path: dist/hand-clean_*
+          path: dist/handbyte_*
 
   release:
     name: publish release

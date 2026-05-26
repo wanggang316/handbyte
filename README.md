@@ -1,8 +1,8 @@
-# hand-clean
+# handbyte
 
 An interactive macOS disk cleanup CLI.
 
-`hand-clean` scans the well-known noisy paths on a macOS dev machine — Xcode
+`handbyte` scans the well-known noisy paths on a macOS dev machine — Xcode
 DerivedData, iOS DeviceSupport, language caches, project build artifacts,
 container VM data — shows them in a multi-select TUI, and lets you delete
 selected items safely (move-to-Trash by default).
@@ -12,32 +12,32 @@ selected items safely (move-to-Trash by default).
 One-liner (downloads the latest release, installs to `/usr/local/bin`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/wanggang316/hand-clean/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wanggang316/handbyte/main/install.sh | bash
 ```
 
 Pin a version, or install to a user-writable prefix:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/wanggang316/hand-clean/main/install.sh | VERSION=v0.1.0 bash
-curl -fsSL https://raw.githubusercontent.com/wanggang316/hand-clean/main/install.sh | PREFIX=$HOME/.local bash
+curl -fsSL https://raw.githubusercontent.com/wanggang316/handbyte/main/install.sh | VERSION=v0.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/wanggang316/handbyte/main/install.sh | PREFIX=$HOME/.local bash
 ```
 
 From source (requires Go 1.26+):
 
 ```sh
-go install github.com/wanggang316/hand-clean@latest   # or
-make install                                          # ~/.local/bin/hand-clean
+go install github.com/wanggang316/handbyte@latest   # or
+make install                                          # ~/.local/bin/handbyte
 ```
 
 ## Usage
 
 ```sh
-hand-clean                 # interactive TUI
-hand-clean --dry-run       # preview what would be deleted
-hand-clean --rm            # delete directly (skip Trash, unrecoverable)
-hand-clean --min=200M      # ignore items smaller than 200 MiB
-hand-clean --roots=~/work  # project scan roots (default: ~/dev ~/Projects ~/Code ~/workspace)
-hand-clean --no-projects   # skip project artifact scan
+handbyte                 # interactive TUI
+handbyte --dry-run       # preview what would be deleted
+handbyte --rm            # delete directly (skip Trash, unrecoverable)
+handbyte --min=200M      # ignore items smaller than 200 MiB
+handbyte --roots=~/work  # project scan roots (default: ~/dev ~/Projects ~/Code ~/workspace)
+handbyte --no-projects   # skip project artifact scan
 ```
 
 ## Key bindings
