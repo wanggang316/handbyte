@@ -12,8 +12,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"hand-clean/internal/cleaner"
-	"hand-clean/internal/scanner"
+	"github.com/wanggang316/hand-clean/internal/cleaner"
+	"github.com/wanggang316/hand-clean/internal/scanner"
 )
 
 // phase tracks which screen is currently rendered.

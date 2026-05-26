@@ -21,9 +21,9 @@ import (
 	"strings"
 	"syscall"
 
-	"hand-clean/internal/cleaner"
-	"hand-clean/internal/scanner"
-	"hand-clean/internal/ui"
+	"github.com/wanggang316/hand-clean/internal/cleaner"
+	"github.com/wanggang316/hand-clean/internal/scanner"
+	"github.com/wanggang316/hand-clean/internal/ui"
 )
 
 func main() {

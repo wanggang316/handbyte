@@ -1,4 +1,4 @@
-module hand-clean
+module github.com/wanggang316/hand-clean
 
 go 1.26.2
 

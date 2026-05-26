@@ -9,12 +9,25 @@ selected items safely (move-to-Trash by default).
 
 ## Install
 
+One-liner (downloads the latest release, installs to `/usr/local/bin`):
+
 ```sh
-go install ./...   # or
-make install       # copies binary to ~/.local/bin/hand-clean
+curl -fsSL https://raw.githubusercontent.com/wanggang316/hand-clean/main/install.sh | bash
 ```
 
-Requires Go 1.21+.
+Pin a version, or install to a user-writable prefix:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/wanggang316/hand-clean/main/install.sh | VERSION=v0.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/wanggang316/hand-clean/main/install.sh | PREFIX=$HOME/.local bash
+```
+
+From source (requires Go 1.26+):
+
+```sh
+go install github.com/wanggang316/hand-clean@latest   # or
+make install                                          # ~/.local/bin/hand-clean
+```
 
 ## Usage
 
