@@ -1,12 +1,16 @@
-.PHONY: build install run tidy clean
+.PHONY: build install uninstall run tidy clean
 
 BIN := handbyte
+PREFIX ?= $(HOME)/.local
 
 build:
 	go build -o $(BIN) .
 
 install: build
-	install -m 0755 $(BIN) $(HOME)/.local/bin/$(BIN)
+	install -m 0755 $(BIN) $(PREFIX)/bin/$(BIN)
+
+uninstall:
+	rm -f $(PREFIX)/bin/$(BIN)
 
 run:
 	go run .

@@ -12,21 +12,39 @@ selected items safely (move-to-Trash by default).
 One-liner (downloads the latest release, installs to `/usr/local/bin`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/wanggang316/handbyte/main/install.sh | bash
+curl -fsSL https://handbyte.gumpw.com/install.sh | bash
 ```
 
 Pin a version, or install to a user-writable prefix:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/wanggang316/handbyte/main/install.sh | VERSION=v0.1.0 bash
-curl -fsSL https://raw.githubusercontent.com/wanggang316/handbyte/main/install.sh | PREFIX=$HOME/.local bash
+curl -fsSL https://handbyte.gumpw.com/install.sh | VERSION=v0.2.0 bash
+curl -fsSL https://handbyte.gumpw.com/install.sh | PREFIX=$HOME/.local bash
 ```
 
 From source (requires Go 1.26+):
 
 ```sh
 go install github.com/wanggang316/handbyte@latest   # or
-make install                                          # ~/.local/bin/handbyte
+make install                                        # → $HOME/.local/bin/handbyte
+```
+
+## Uninstall
+
+`handbyte` writes no config files and no caches. Removing the binary uninstalls it.
+
+```sh
+# One-liner (same script, UNINSTALL=1 mode).
+curl -fsSL https://handbyte.gumpw.com/install.sh | UNINSTALL=1 bash
+
+# If you installed to a custom prefix:
+curl -fsSL https://handbyte.gumpw.com/install.sh | UNINSTALL=1 PREFIX=$HOME/.local bash
+
+# From source:
+make uninstall                          # uses PREFIX (default $HOME/.local)
+
+# Manual:
+sudo rm "$(command -v handbyte)"
 ```
 
 ## Usage
