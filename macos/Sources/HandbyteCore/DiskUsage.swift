@@ -63,6 +63,18 @@ public struct FileStatus: Sendable, Hashable {
     }
 }
 
+extension URL {
+    /// The path handed to fts(3) and lstat(2). Directory URLs carry a trailing
+    /// slash that fts would echo into every child path.
+    var fileSystemPath: String {
+        let path = path(percentEncoded: false)
+        if path.count > 1, path.hasSuffix("/") {
+            return String(path.dropLast())
+        }
+        return path
+    }
+}
+
 extension Date {
     init(_ time: timespec) {
         self.init(timeIntervalSince1970: TimeInterval(time.tv_sec) + TimeInterval(time.tv_nsec) / 1e9)
@@ -86,7 +98,7 @@ public enum DiskUsage {
         progress: ProgressHandler? = nil
     ) -> DiskUsageReport {
         var report = DiskUsageReport()
-        let root = strdup(url.path(percentEncoded: false))
+        let root = strdup(url.fileSystemPath)
         defer { free(root) }
         var paths: [UnsafeMutablePointer<CChar>?] = [root, nil]
         let options = FTS_PHYSICAL | FTS_NOCHDIR | FTS_XDEV
