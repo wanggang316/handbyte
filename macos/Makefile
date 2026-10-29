@@ -1,4 +1,4 @@
-.PHONY: build test sync-check generate app clean
+.PHONY: build test sync-check parity generate app clean
 
 DERIVED_DATA ?= .dd
 # Debug build for local runs and CI: ad-hoc identity, universal binary.
@@ -14,6 +14,11 @@ test:
 
 sync-check:
 	scripts/sync-check.sh
+
+# Manual: compare hbscan with the Go CLI on this machine. PARITY_ARGS passes
+# flags such as --min 100M --no-projects to both scanners.
+parity:
+	scripts/parity.sh $(PARITY_ARGS)
 
 generate:
 	xcodegen generate

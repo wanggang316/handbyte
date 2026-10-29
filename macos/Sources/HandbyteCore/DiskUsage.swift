@@ -64,9 +64,9 @@ public struct FileStatus: Sendable, Hashable {
 }
 
 extension URL {
-    /// The path handed to fts(3) and lstat(2). Directory URLs carry a trailing
-    /// slash that fts would echo into every child path.
-    var fileSystemPath: String {
+    /// The path handed to fts(3), lstat(2) and shown to users. Directory URLs
+    /// carry a trailing slash that fts would echo into every child path.
+    public var fileSystemPath: String {
         let path = path(percentEncoded: false)
         if path.count > 1, path.hasSuffix("/") {
             return String(path.dropLast())

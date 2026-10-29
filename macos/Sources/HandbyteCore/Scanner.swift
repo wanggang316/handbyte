@@ -12,17 +12,18 @@ public struct DiskScanner: Sendable {
     public func scan(_ configuration: ScanConfiguration) -> AsyncStream<ScanEvent> {
         AsyncStream { continuation in
             let task = Task {
-                _ = await scan(configuration) { continuation.yield($0) }
+                _ = await collect(configuration) { continuation.yield($0) }
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
 
-    /// Runs in the caller's task, so cancelling that task stops the scan:
-    /// no new walk starts, walks in flight stop, and their categories are
-    /// reported as cancelled in the result and in the `categoryFinished` events.
-    public func scan(
+    /// Runs in the caller's task and collects the result. Cancelling that task
+    /// stops the scan: no new walk starts, walks in flight stop, and their
+    /// categories are reported as cancelled in the result and in the
+    /// `categoryFinished` events.
+    public func collect(
         _ configuration: ScanConfiguration,
         onEvent emit: @escaping @Sendable (ScanEvent) -> Void = { _ in }
     ) async -> ScanResult {

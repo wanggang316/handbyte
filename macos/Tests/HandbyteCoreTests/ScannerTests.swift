@@ -42,7 +42,7 @@ private func configuration(
     try home.writeFile("Library/Caches/Homebrew/x.tar.gz", size: 50_000)
     try home.writeFile(".npm/_cacache/index", size: 100)
 
-    let result = await DiskScanner().scan(configuration(
+    let result = await DiskScanner().collect(configuration(
         home, rules: rules("npm-cache", "brew-cache", "xcode-derived"), minimumSize: 8192
     ))
 
@@ -65,7 +65,7 @@ private func configuration(
     try home.writeFile("Library/Caches/go-build/00/obj", size: 10)
     try home.writeFile("Library/Caches/Google/Chrome/blob", size: 10)
 
-    let result = await DiskScanner().scan(configuration(home))
+    let result = await DiskScanner().collect(configuration(home))
 
     #expect(result.candidates.count == 2)
     let byPath = Dictionary(uniqueKeysWithValues: result.candidates.map { ($0.url.lastPathComponent, $0.rule.id) })
@@ -81,7 +81,7 @@ private func configuration(
     try home.makeDirectory("elsewhere")
     try home.symlink(".cache/linked", to: "elsewhere")
 
-    let result = await DiskScanner().scan(configuration(home, rules: rules("xdg-cache")))
+    let result = await DiskScanner().collect(configuration(home, rules: rules("xdg-cache")))
 
     #expect(result.candidates.map(\.url.lastPathComponent).sorted() == ["pip", "uv"])
     #expect(result.candidates.allSatisfy { $0.rule.id == "xdg-cache" })
@@ -96,7 +96,7 @@ private func configuration(
     try home.makeUnreadable("Library/Developer/Xcode/DerivedData/locked")
     try home.writeFile("Library/Caches/Homebrew/x", size: 10)
 
-    let result = await DiskScanner().scan(configuration(home, rules: rules("xcode-derived", "brew-cache", "downloads")))
+    let result = await DiskScanner().collect(configuration(home, rules: rules("xcode-derived", "brew-cache", "downloads")))
 
     #expect(result.categories == [.xcode: .partial, .devCache: .complete, .other: .unavailable])
     let derived = try #require(result.candidates.first { $0.rule.id == "xcode-derived" })
@@ -111,7 +111,7 @@ private func configuration(
     try home.writeFile("Library/Logs/app/x.log", size: 10)
     try home.makeUnreadable("Library/Logs")
 
-    let result = await DiskScanner().scan(configuration(home, rules: rules("library-logs")))
+    let result = await DiskScanner().collect(configuration(home, rules: rules("library-logs")))
 
     #expect(result.candidates.isEmpty)
     #expect(result.categories == [.trash: .partial])
@@ -124,7 +124,7 @@ private func configuration(
     try home.writeFile("Downloads/x", size: 10)
     let scanConfiguration = configuration(home, rules: rules("brew-cache", "downloads"))
 
-    let task = Task { await DiskScanner().scan(scanConfiguration) }
+    let task = Task { await DiskScanner().collect(scanConfiguration) }
     task.cancel()
     let result = await task.value
 
@@ -164,7 +164,7 @@ private final class CancelOnFirstCandidate: Sendable {
     let scanConfiguration = configuration(home, rules: rules("brew-cache", "trash", "downloads"), workers: 1)
     let canceller = CancelOnFirstCandidate()
 
-    let task = Task { await DiskScanner().scan(scanConfiguration, onEvent: canceller.handle) }
+    let task = Task { await DiskScanner().collect(scanConfiguration, onEvent: canceller.handle) }
     canceller.attach(task)
     let result = await task.value
 
@@ -224,13 +224,13 @@ private final class CancelOnFirstCandidate: Sendable {
     try home.writeFile("src/tool/target/debug/bin", size: 10)
     try home.writeFile("elsewhere/build/out", size: 10)
 
-    let result = await DiskScanner().scan(configuration(home, roots: ["~/dev", home.path("src").path, "~/missing"], skipProjectScan: false))
+    let result = await DiskScanner().collect(configuration(home, roots: ["~/dev", home.path("src").path, "~/missing"], skipProjectScan: false))
 
     #expect(Set(result.candidates.map(\.rule.id)) == ["artifact:node_modules", "artifact:target"])
     #expect(result.candidates.allSatisfy { $0.rule.category == .projectBuild })
     #expect(result.categories[.projectBuild] == .complete)
 
-    let skipped = await DiskScanner().scan(configuration(home, roots: ["~/dev"], skipProjectScan: true))
+    let skipped = await DiskScanner().collect(configuration(home, roots: ["~/dev"], skipProjectScan: true))
     #expect(skipped.candidates.isEmpty)
     #expect(skipped.categories[.projectBuild] == nil)
 }
@@ -240,7 +240,7 @@ private final class CancelOnFirstCandidate: Sendable {
     defer { home.cleanUp() }
     try home.writeFile("Library/Developer/Xcode/DerivedData/a.o", size: 10)
 
-    let result = await DiskScanner().scan(configuration(home, roots: ["~/Library"], skipProjectScan: false))
+    let result = await DiskScanner().collect(configuration(home, roots: ["~/Library"], skipProjectScan: false))
 
     #expect(result.candidates.map(\.rule.id) == ["xcode-derived"])
 }
