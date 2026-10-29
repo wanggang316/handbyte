@@ -16,6 +16,7 @@ import (
 
 // Progress is emitted live during scanning.
 type Progress struct {
+	Run         uint64
 	CurrentPath string
 	BytesSeen   int64
 	FilesSeen   int64
@@ -26,6 +27,7 @@ type Progress struct {
 
 // Config controls a scan.
 type Config struct {
+	Scope         string
 	Exclusions    []string
 	ActivityProbe ActivityProbe
 	// ProjectRoots overrides DefaultProjectRoots if non-empty.
@@ -78,61 +80,63 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		unavailable = append(unavailable, Item{Path: path, Category: category, Safety: SafetyCaution, ScanStatus: "unavailable", ScanError: err.Error()})
 	}
 
-	for _, p := range Presets {
-		expanded, ok := expandHome(p.Path)
-		if !ok {
-			continue
-		}
-		info, err := os.Lstat(expanded)
-		if err != nil {
-			report(expanded, p.Category, err)
-			continue
-		}
-		if !info.IsDir() {
-			continue
-		}
-		if p.ExpandChildren {
-			entries, err := os.ReadDir(expanded)
+	if cfg.Scope != "projects" {
+		for _, p := range Presets {
+			expanded, ok := expandHome(p.Path)
+			if !ok {
+				continue
+			}
+			info, err := os.Lstat(expanded)
 			if err != nil {
 				report(expanded, p.Category, err)
 				continue
 			}
-			for _, e := range entries {
-				if !e.IsDir() {
+			if !info.IsDir() {
+				continue
+			}
+			if p.ExpandChildren {
+				entries, err := os.ReadDir(expanded)
+				if err != nil {
+					report(expanded, p.Category, err)
 					continue
 				}
+				for _, e := range entries {
+					if !e.IsDir() {
+						continue
+					}
+					tasks = append(tasks, task{
+						path:        filepath.Join(expanded, e.Name()),
+						category:    p.Category,
+						safety:      p.Safety,
+						description: p.Description,
+						source:      p.Source,
+					})
+				}
+			} else {
 				tasks = append(tasks, task{
-					path:        filepath.Join(expanded, e.Name()),
+					path:        expanded,
 					category:    p.Category,
 					safety:      p.Safety,
 					description: p.Description,
 					source:      p.Source,
 				})
 			}
+		}
+
+		simulatorItems, simulatorErr := discoverSimulators(ctx)
+		if simulatorErr != nil {
+			for _, it := range simulatorItems {
+				report(it.Path, CatXcode, simulatorErr)
+			}
 		} else {
-			tasks = append(tasks, task{
-				path:        expanded,
-				category:    p.Category,
-				safety:      p.Safety,
-				description: p.Description,
-				source:      p.Source,
-			})
+			for _, it := range simulatorItems {
+				tasks = append(tasks, task{path: it.Path, category: it.Category, safety: it.Safety, description: it.Description, source: it.Source, owner: it.Owner, name: it.Name})
+			}
 		}
-	}
 
-	simulatorItems, simulatorErr := discoverSimulators(ctx)
-	if simulatorErr != nil {
-		for _, it := range simulatorItems {
-			report(it.Path, CatXcode, simulatorErr)
-		}
-	} else {
-		for _, it := range simulatorItems {
-			tasks = append(tasks, task{path: it.Path, category: it.Category, safety: it.Safety, description: it.Description, source: it.Source, owner: it.Owner, name: it.Name})
-		}
 	}
-
 	// Project artifact roots: collected up-front so we can du them like presets.
-	if !cfg.SkipProjectScan {
+	if !cfg.SkipProjectScan && cfg.Scope != "quick" {
 		roots := cfg.ProjectRoots
 		if len(roots) == 0 {
 			roots = DefaultProjectRoots
@@ -235,7 +239,7 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 					status = "cancelled"
 				}
 				it := Item{
-					Identity: id, Project: t.project, Scope: t.scope, Owner: t.owner, Name: t.name,
+					IsDir: true, Identity: id, Project: t.project, Scope: t.scope, Owner: t.owner, Name: t.name,
 					ScanStatus: status, ScanError: reason,
 					Path:        t.path,
 					Size:        size,
@@ -308,9 +312,6 @@ func du(ctx context.Context, path string) (int64, int64, time.Time, error) {
 			}
 			return nil
 		}
-		if d.IsDir() {
-			return nil
-		}
 		info, err := d.Info()
 		if err != nil {
 			if scanErr == nil {
@@ -321,10 +322,12 @@ func du(ctx context.Context, path string) (int64, int64, time.Time, error) {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return nil
 		}
-		total += diskBytes(info)
-		count++
 		if mt := info.ModTime(); mt.After(mod) {
 			mod = mt
+		}
+		if !d.IsDir() {
+			total += diskBytes(info)
+			count++
 		}
 		return nil
 	})
