@@ -159,3 +159,29 @@ func TestCollapsedGroupCanSelectEligibleItems(t *testing.T) {
 		t.Fatal("collapsed group cannot select its items")
 	}
 }
+
+func TestResultsPreserveRecoveryErrors(t *testing.T) {
+	m := New(scanner.Default(), cleaner.ModeTrash, 0)
+	m.phase = phaseDone
+	m.width, m.height = 180, 24
+	m.cleanRes = []cleaner.Result{{Status: "trashed", Path: "/fixture/cache", Destination: "/Trash/cache", Message: "Restore in Finder", JournalError: "disk full"}}
+	view := m.renderDone()
+	for _, want := range []string{"Restore in Finder", "disk full", "/Trash/cache"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("missing %q: %s", want, view)
+		}
+	}
+	if strings.Contains(view, "[u] Restore") {
+		t.Error("unavailable restore offered")
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if cmd != nil || m.restoring {
+		t.Error("unavailable restore started")
+	}
+	m.cleanRes[0].Message, m.cleanRes[0].JournalError = "", ""
+	m.cleanRes[0].ID = "verified"
+	m.cleanRes[0].TrashIdentity.Inode = 1
+	if !strings.Contains(m.renderDone(), "[u] Restore") {
+		t.Error("verified restore unavailable")
+	}
+}
