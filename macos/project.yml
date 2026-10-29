@@ -36,8 +36,10 @@ targets:
       properties:
         CFBundleName: Handbyte
         CFBundleDisplayName: Handbyte
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        # Driven by MARKETING_VERSION / CURRENT_PROJECT_VERSION so release.sh
+        # can override both on the xcodebuild command line.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
         LSApplicationCategoryType: public.app-category.utilities
         NSHumanReadableCopyright: "Copyright 2026 Gump"
