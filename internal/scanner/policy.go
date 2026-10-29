@@ -70,8 +70,13 @@ func Excluded(path string, exclusions []string) bool {
 
 func ruleAllows(it Item) bool {
 	if strings.HasPrefix(it.Source, "artifact:") {
-		return it.Project != "" && it.Scope != "" && Contains(it.Scope, it.Path) && it.Path != it.Scope && Contains(it.Project, it.Path) && it.Path != it.Project
+		if it.Source != "artifact:"+filepath.Base(it.Path) || it.Scope == "" || it.Path == it.Scope {
+			return false
+		}
+		evidence, ok := projectEvidence(it.Path, it.Scope)
+		return ok && evidence.project == it.Project && evidence.owner == it.Owner
 	}
+
 	for _, p := range Presets {
 		if p.Source != it.Source || p.Safety == SafetyCaution {
 			continue
@@ -177,14 +182,22 @@ func protectContents(ctx context.Context, path string) error {
 			return fmt.Errorf("protected content: %s", name)
 		}
 		if d.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("symbolic link requires inspection: %s", name)
+			return nil // Recursive removal and Trash do not follow child links.
 		}
 		return nil
 	})
 }
 
 func assess(ctx context.Context, it *Item, exclusions []string, probe ActivityProbe) {
-	it.Name = filepath.Base(it.Path)
+	if it.Name == "" {
+		it.Name = filepath.Base(it.Path)
+	}
+	if it.Owner == "" {
+		it.Owner = ownerLabel(it.Source)
+	}
+	if it.Project != "" {
+		it.Description = artifactConsequence(it.Owner, filepath.Base(it.Path))
+	}
 	it.ScannedAt = time.Now()
 	it.Eligibility = Protected
 	if err := checkBoundary(ctx, *it, exclusions); err != nil {

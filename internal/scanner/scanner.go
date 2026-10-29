@@ -61,11 +61,13 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 	// Build the task list: preset paths (possibly expanded), plus project
 	// artifact scans rooted at user dev directories.
 	type task struct {
-		path        string
-		category    Category
-		safety      Safety
-		description string
-		source      string
+		path                  string
+		category              Category
+		safety                Safety
+		description           string
+		source                string
+		project, scope, owner string
+		name                  string
 	}
 	var tasks []task
 	var unavailable []Item
@@ -118,6 +120,17 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		}
 	}
 
+	simulatorItems, simulatorErr := discoverSimulators(ctx)
+	if simulatorErr != nil {
+		for _, it := range simulatorItems {
+			report(it.Path, CatXcode, simulatorErr)
+		}
+	} else {
+		for _, it := range simulatorItems {
+			tasks = append(tasks, task{path: it.Path, category: it.Category, safety: it.Safety, description: it.Description, source: it.Source, owner: it.Owner, name: it.Name})
+		}
+	}
+
 	// Project artifact roots: collected up-front so we can du them like presets.
 	if !cfg.SkipProjectScan {
 		roots := cfg.ProjectRoots
@@ -130,9 +143,9 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		}
 		matches := findArtifacts(ctx, roots, patternByName, progress, func(path string, err error) { report(path, CatProjectBuild, err) })
 		for _, m := range matches {
-			pat := patternByName[filepath.Base(m)]
+			pat := patternByName[filepath.Base(m.path)]
 			tasks = append(tasks, task{
-				path:        m,
+				path: m.path, project: m.project, scope: m.scope, owner: m.owner,
 				category:    pat.Category,
 				safety:      pat.Safety,
 				description: pat.Description,
@@ -222,7 +235,7 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 					status = "cancelled"
 				}
 				it := Item{
-					Identity:   id,
+					Identity: id, Project: t.project, Scope: t.scope, Owner: t.owner, Name: t.name,
 					ScanStatus: status, ScanError: reason,
 					Path:        t.path,
 					Size:        size,
@@ -322,9 +335,9 @@ func du(ctx context.Context, path string) (int64, int64, time.Time, error) {
 // one of the configured project artifact patterns. When a match is found,
 // the walker does not descend into it (so we count node_modules without
 // walking into nested node_modules).
-func findArtifacts(ctx context.Context, roots []string, patterns map[string]ProjectArtifact, progress chan<- Progress, report func(string, error)) []string {
+func findArtifacts(ctx context.Context, roots []string, patterns map[string]ProjectArtifact, progress chan<- Progress, report func(string, error)) []projectTarget {
 	var (
-		found []string
+		found []projectTarget
 		mu    sync.Mutex
 	)
 	for _, root := range roots {
@@ -332,10 +345,12 @@ func findArtifacts(ctx context.Context, roots []string, patterns map[string]Proj
 		if !ok {
 			continue
 		}
-		if _, err := os.Stat(expanded); err != nil {
+		canonical, err := Physical(expanded)
+		if err != nil {
 			report(expanded, err)
 			continue
 		}
+		expanded = canonical
 		if progress != nil {
 			select {
 			case progress <- Progress{CurrentPath: "scanning " + expanded}:
@@ -360,7 +375,9 @@ func findArtifacts(ctx context.Context, roots []string, patterns map[string]Proj
 			base := d.Name()
 			if _, hit := patterns[base]; hit {
 				mu.Lock()
-				found = append(found, p)
+				if candidate, ok := projectEvidence(p, expanded); ok && p != expanded {
+					found = append(found, candidate)
+				}
 				mu.Unlock()
 				return filepath.SkipDir
 			}
