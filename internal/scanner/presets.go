@@ -249,7 +249,7 @@ var Presets = []Preset{
 		Path:        "~/.docker",
 		Category:    CatVMs,
 		Safety:      SafetyCaution,
-		Description: "Docker config & data. Use `docker system prune` first.",
+		Description: "Docker configuration and runtime data. Inspect storage in Docker Desktop.",
 		Source:      "docker",
 	},
 
