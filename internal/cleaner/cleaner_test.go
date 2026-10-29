@@ -96,3 +96,38 @@ func TestOverlappingSelectionSkipsParent(t *testing.T) {
 		t.Fatalf("parent overlap not blocked: %+v", results)
 	}
 }
+
+func TestExecuteRefusesCorruptJournal(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	path := filepath.Join(os.Getenv("HOME"), ".npm/_cacache")
+	if err := os.MkdirAll(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	idle := func(context.Context, scanner.Item) (scanner.Activity, error) { return scanner.Idle, nil }
+	items, err := scanner.Scan(context.Background(), scanner.Config{Workers: 1, SkipProjectScan: true, ActivityProbe: idle}, nil)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("fixture: %v %v", items, err)
+	}
+	journal, err := journalPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(journal), 0700); err != nil {
+		t.Fatal(err)
+	}
+	broken := []byte("{\"ID\":")
+	if err := os.WriteFile(journal, broken, 0600); err != nil {
+		t.Fatal(err)
+	}
+	results := Execute(context.Background(), items, Options{Mode: ModeRemove, ActivityProbe: idle}, nil)
+	if len(results) != 1 || results[0].Status != "failed" {
+		t.Fatalf("corrupt journal accepted: %+v", results)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("target changed: %v", err)
+	}
+	data, err := os.ReadFile(journal)
+	if err != nil || string(data) != string(broken) {
+		t.Fatalf("corrupt evidence changed: %q %v", data, err)
+	}
+}
