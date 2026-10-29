@@ -123,3 +123,20 @@ final class CleaningFixture {
         try? FileManager.default.removeItem(at: root)
     }
 }
+
+/// A value guarded by a lock, for collecting results from `@Sendable` callbacks.
+/// (`Synchronization.Mutex` needs macOS 15; the package targets 14.)
+final class LockedBox<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
+
+    func withLock<Result>(_ body: (inout Value) throws -> Result) rethrows -> Result {
+        lock.lock()
+        defer { lock.unlock() }
+        return try body(&value)
+    }
+}
