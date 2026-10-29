@@ -87,10 +87,6 @@ struct ReviewView: View {
             }
             .pickerStyle(.segmented)
             .help("Sort candidates by size or name")
-            Button("Select All Safe") { store.selection.selectAllSafe() }
-                .help("Select every eligible candidate whose rule is marked safe")
-            Button("Clear") { store.selection.clear() }
-                .disabled(store.selection.selectedIDs.isEmpty)
             Button("Rescan", systemImage: "arrow.clockwise", action: store.startScan)
                 .help("Scan again")
         }
@@ -98,6 +94,10 @@ struct ReviewView: View {
 
     private var footer: some View {
         HStack {
+            Button("Select All Safe") { store.selection.selectAllSafe() }
+                .help("Select every eligible candidate whose rule is marked safe")
+            Button("Clear") { store.selection.clear() }
+                .disabled(store.selection.selectedIDs.isEmpty)
             if case .reviewing(let result) = store.phase, result.cancelled {
                 Label("Scan cancelled: the list is incomplete", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
