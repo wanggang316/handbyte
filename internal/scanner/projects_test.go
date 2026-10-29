@@ -84,3 +84,26 @@ func TestXcodeTargetsAreSplitAndArchivesStayProtected(t *testing.T) {
 		t.Fatalf("expected 2 projects and 1 device version, got %d and %d", derived, device)
 	}
 }
+
+func TestArtifactNamesDoNotHideProjectRoots(t *testing.T) {
+	for _, name := range []string{"build", "target", "dist"} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			project := filepath.Join(home, name)
+			target := filepath.Join(project, ".next")
+			if err := os.MkdirAll(target, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(project, "package.json"), []byte("{}"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, root := range []string{project, home} {
+				items, err := Scan(context.Background(), Config{Scope: "projects", ProjectRoots: []string{root}, Workers: 1, ActivityProbe: idleProbe}, nil)
+				if err != nil || len(items) != 1 || filepath.Base(items[0].Path) != ".next" {
+					t.Errorf("root %s hides project: %+v, %v", root, items, err)
+				}
+			}
+		})
+	}
+}

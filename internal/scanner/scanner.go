@@ -376,13 +376,16 @@ func findArtifacts(ctx context.Context, roots []string, patterns map[string]Proj
 			}
 			// Skip dot-dirs at root level except those we explicitly want.
 			base := d.Name()
-			if _, hit := patterns[base]; hit {
-				mu.Lock()
-				if candidate, ok := projectEvidence(p, expanded); ok && p != expanded {
+			if _, hit := patterns[base]; hit && p != expanded {
+				if candidate, ok := projectEvidence(p, expanded); ok {
+					mu.Lock()
 					found = append(found, candidate)
+					mu.Unlock()
+					return filepath.SkipDir
 				}
-				mu.Unlock()
-				return filepath.SkipDir
+				if base == "node_modules" {
+					return filepath.SkipDir
+				}
 			}
 			// Don't descend into VCS metadata.
 			if base == ".git" || base == ".svn" || base == ".hg" {
