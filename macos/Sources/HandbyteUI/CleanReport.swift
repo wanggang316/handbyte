@@ -10,7 +10,7 @@ public struct ReportItem: Sendable, Equatable, Identifiable {
     public var id: Candidate.ID { candidate.id }
     public var candidate: Candidate { outcome.candidate }
 
-    init(_ outcome: CleanOutcome) {
+    public init(_ outcome: CleanOutcome) {
         self.outcome = outcome
         detail = switch outcome.status {
         case .moved(let url): url.fileSystemPath

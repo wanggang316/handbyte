@@ -29,6 +29,8 @@ targets:
     dependencies:
       - package: HandbyteCore
         product: HandbyteCore
+      - package: HandbyteCore
+        product: HandbyteUI
       - package: Sparkle
         product: Sparkle
     info:

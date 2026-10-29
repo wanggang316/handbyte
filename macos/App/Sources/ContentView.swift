@@ -1,8 +1,21 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(AppStore.self) private var store
+
     var body: some View {
-        Color.clear
-            .frame(minWidth: 640, minHeight: 400)
+        Group {
+            switch store.phase {
+            case .idle, .scanning:
+                ScanView()
+            case .reviewing, .confirming:
+                ReviewView()
+            case .cleaning(let run):
+                CleaningView(run: run)
+            case .report(let report):
+                ReportView(report: report)
+            }
+        }
+        .frame(minWidth: 900, minHeight: 560)
     }
 }
