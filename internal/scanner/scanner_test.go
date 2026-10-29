@@ -23,7 +23,8 @@ func TestScanReportsSpecificCacheOnce(t *testing.T) {
 	}
 	var matches []Item
 	for _, it := range items {
-		if it.Path == path {
+		physical, _ := Physical(path)
+		if it.Path == physical {
 			matches = append(matches, it)
 		}
 	}
@@ -56,4 +57,22 @@ func TestScanKeepsUnreadableCategoryVisible(t *testing.T) {
 		}
 	}
 	t.Fatalf("unreadable category disappeared: %+v", items)
+}
+
+func TestScanExplainsEligibility(t *testing.T) {
+	it := reviewedCache(t)
+	items, err := Scan(context.Background(), Config{Workers: 1, SkipProjectScan: true, ActivityProbe: idleProbe}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, got := range items {
+		physical, _ := Physical(got.Path)
+		if physical == it.Path {
+			if !got.Selectable() || got.Identity.Inode == 0 || got.Reason == "" {
+				t.Fatalf("missing review evidence: %+v", got)
+			}
+			return
+		}
+	}
+	t.Fatal("cache missing")
 }
