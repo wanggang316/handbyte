@@ -50,12 +50,13 @@ type Model struct {
 	spin spinner.Model
 
 	// scanning state
-	scanCtx    context.Context
-	scanCancel context.CancelFunc
-	scanProg   scanner.Progress
-	scanErr    error
-	scanCh     chan scanner.Progress
-	cleanCh    chan cleaner.Progress
+	scanCtx     context.Context
+	scanCancel  context.CancelFunc
+	cleanCancel context.CancelFunc
+	scanProg    scanner.Progress
+	scanErr     error
+	scanCh      chan scanner.Progress
+	cleanCh     chan cleaner.Progress
 
 	// list state
 	items     []scanner.Item
@@ -146,6 +147,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.waitCleanProgress()
 
 	case cleanDoneMsg:
+		if m.cleanCancel != nil {
+			m.cleanCancel()
+			m.cleanCancel = nil
+		}
 		m.cleanRes = msg.results
 		m.phase = phaseDone
 		return m, nil
@@ -163,6 +168,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "ctrl+c", "q":
+		if m.phase == phaseCleaning {
+			if m.cleanCancel != nil {
+				m.cleanCancel()
+			}
+			return m, nil
+		}
 		if m.scanCancel != nil {
 			m.scanCancel()
 		}
@@ -414,18 +425,14 @@ func (m *Model) startScan() (tea.Model, tea.Cmd) {
 
 func (m *Model) startClean() (tea.Model, tea.Cmd) {
 	m.phase = phaseCleaning
-	paths := []string{}
-	sizes := map[string]int64{}
-	for _, it := range m.selectedItems() {
-		paths = append(paths, it.Path)
-		sizes[it.Path] = it.Size
-	}
-	ctx := context.Background()
+	items := m.selectedItems()
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cleanCancel = cancel
 	m.cleanCh = make(chan cleaner.Progress, 32)
 	ch := m.cleanCh
 	prog := teaProgram
 	go func() {
-		results := cleaner.Clean(ctx, paths, sizes, m.cleanMode, ch)
+		results := cleaner.Execute(ctx, items, cleaner.Options{Mode: m.cleanMode, Exclusions: m.cfg.Exclusions}, ch)
 		prog.Send(cleanDoneMsg{results: results})
 	}()
 	return m, waitProgress(ch, func(p cleaner.Progress) tea.Msg { return cleanProgressMsg(p) })

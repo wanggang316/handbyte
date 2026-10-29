@@ -32,7 +32,7 @@ func Physical(path string) (string, error) {
 	return filepath.EvalSymlinks(abs)
 }
 
-func identity(path string) (Identity, error) {
+func CaptureIdentity(path string) (Identity, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return Identity{}, err
@@ -122,7 +122,7 @@ func checkBoundary(ctx context.Context, it Item, exclusions []string) error {
 	if !ruleAllows(it) {
 		return errors.New("inspection only: no supported cleanup rule")
 	}
-	id, err := identity(it.Path)
+	id, err := CaptureIdentity(it.Path)
 	if err != nil {
 		return err
 	}

@@ -202,7 +202,7 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 					return
 				}
 				emit(t.path)
-				id, idErr := identity(t.path)
+				id, idErr := CaptureIdentity(t.path)
 				size, count, mt, scanErr := du(ctx, t.path)
 				if idErr != nil {
 					scanErr = idErr
