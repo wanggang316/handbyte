@@ -1,0 +1,44 @@
+name: macos-ci
+
+on:
+  push:
+    paths:
+      - 'macos/**'
+      - '.github/workflows/macos-ci.yml'
+  pull_request:
+    paths:
+      - 'macos/**'
+      - '.github/workflows/macos-ci.yml'
+
+concurrency:
+  group: macos-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build and test
+    # Hosted runners have no Xcode 27; Xcode 26.x builds a tools-version 6.2 package.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app
+          xcodebuild -version
+          swift --version
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Build package
+        run: make -C macos build
+
+      - name: Test package
+        run: make -C macos test
+
+      - name: Generate Xcode project
+        run: make -C macos generate
+
+      - name: Build app (unsigned)
+        run: make -C macos app
