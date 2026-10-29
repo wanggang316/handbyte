@@ -40,7 +40,7 @@ func reviewedCache(t *testing.T) Item {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := identity(path)
+	id, err := CaptureIdentity(path)
 	if err != nil {
 		t.Fatal(err)
 	}
