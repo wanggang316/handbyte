@@ -136,6 +136,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case cleanProgressMsg:
+		if m.phase != phaseCleaning {
+			return m, nil
+		}
 		m.cleanProg = cleaner.Progress(msg)
 		if msg.LastResult != nil {
 			m.cleanRes = append(m.cleanRes, *msg.LastResult)
@@ -683,11 +686,13 @@ func (m *Model) renderCleaning() string {
 }
 
 func (m *Model) renderDone() string {
-	var freed int64
+	var freed, previewed, moved int64
 	failed := 0
 	for _, r := range m.cleanRes {
 		if r.Err == nil {
 			freed += r.Freed
+			previewed += r.Previewed
+			moved += r.Moved
 		} else {
 			failed++
 		}
@@ -696,8 +701,10 @@ func (m *Model) renderDone() string {
 	lines := []string{
 		titleStyle.Render("handbyte") + "  " + title,
 		"",
-		fmt.Sprintf("  cleaned %d items", len(m.cleanRes)-failed),
-		fmt.Sprintf("  freed   %s", accentStyle.Render(humanBytes(freed))),
+		fmt.Sprintf("  processed %d items", len(m.cleanRes)-failed),
+		fmt.Sprintf("  previewed         %s (no changes)", humanBytes(previewed)),
+		fmt.Sprintf("  moved to Trash    %s (space not reclaimed)", humanBytes(moved)),
+		fmt.Sprintf("  removed estimate  %s", humanBytes(freed)),
 	}
 	if failed > 0 {
 		lines = append(lines, dangerStyle.Render(fmt.Sprintf("  failed  %d  (permission / busy)", failed)))

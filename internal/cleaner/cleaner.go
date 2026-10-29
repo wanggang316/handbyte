@@ -26,7 +26,10 @@ const (
 // Result is the outcome of cleaning one path.
 type Result struct {
 	Path      string
-	Freed     int64
+	Freed     int64 // Estimated permanently removed bytes, not a volume delta.
+	Previewed int64
+	Moved     int64
+	Status    string
 	Err       error
 	StartedAt time.Time
 	EndedAt   time.Time
@@ -34,12 +37,12 @@ type Result struct {
 
 // Progress reports incremental status while cleaning a batch.
 type Progress struct {
-	Current     string
-	Completed   int
-	Total       int
-	BytesFreed  int64
-	LastResult  *Result
-	Done        bool
+	Current    string
+	Completed  int
+	Total      int
+	BytesFreed int64
+	LastResult *Result
+	Done       bool
 }
 
 // Clean processes the given paths and emits Progress updates. The progress
@@ -51,6 +54,16 @@ func Clean(ctx context.Context, paths []string, sizes map[string]int64, mode Mod
 	if progress != nil {
 		defer close(progress)
 	}
+	seen := make(map[string]bool)
+	unique := make([]string, 0, len(paths))
+	for _, p := range paths {
+		p = filepath.Clean(p)
+		if !seen[p] {
+			seen[p] = true
+			unique = append(unique, p)
+		}
+	}
+	paths = unique
 	results := make([]Result, 0, len(paths))
 	var freed int64
 
@@ -67,15 +80,23 @@ func Clean(ctx context.Context, paths []string, sizes map[string]int64, mode Mod
 		r := Result{Path: p, StartedAt: time.Now()}
 		switch mode {
 		case ModeDryRun:
-			// no-op
+			r.Previewed = sizes[p]
+			r.Status = "previewed"
 		case ModeTrash:
 			r.Err = moveToTrash(p)
+			if r.Err == nil {
+				r.Moved = sizes[p]
+				r.Status = "trashed"
+			}
 		case ModeRemove:
 			r.Err = os.RemoveAll(p)
+			if r.Err == nil {
+				r.Freed = sizes[p]
+				r.Status = "removed"
+			}
 		}
 		r.EndedAt = time.Now()
 		if r.Err == nil {
-			r.Freed = sizes[p]
 			freed += r.Freed
 		}
 		results = append(results, r)

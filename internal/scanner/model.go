@@ -49,5 +49,7 @@ type Item struct {
 	Safety      Safety
 	Description string // why it's listed and what cleaning means
 	// Source records which preset/pattern produced this item, for grouping.
-	Source string
+	Source     string
+	ScanStatus string
+	ScanError  string
 }
