@@ -108,3 +108,13 @@ func TestValidateRejectsTrackedCache(t *testing.T) {
 		t.Fatal("tracked cache allowed")
 	}
 }
+
+func TestValidateRejectsNewDirectoryAfterReview(t *testing.T) {
+	it := reviewedCache(t)
+	if err := os.Mkdir(filepath.Join(it.Path, "new-work"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := Validate(context.Background(), it, nil, idleProbe); err == nil {
+		t.Fatal("new work was not detected")
+	}
+}

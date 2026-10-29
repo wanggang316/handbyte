@@ -76,3 +76,16 @@ func TestScanExplainsEligibility(t *testing.T) {
 	}
 	t.Fatal("cache missing")
 }
+
+func TestProjectScopeDoesNotIncludeGlobalCaches(t *testing.T) {
+	it := reviewedCache(t)
+	items, err := Scan(context.Background(), Config{Scope: "projects", Workers: 1, SkipProjectScan: true, ActivityProbe: idleProbe}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, got := range items {
+		if got.Path == it.Path {
+			t.Fatal("project-only scan includes global cache")
+		}
+	}
+}

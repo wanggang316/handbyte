@@ -41,6 +41,7 @@ const (
 
 // Item is one cleanable target.
 type Item struct {
+	IsDir       bool
 	Name        string
 	Owner       string
 	Project     string
