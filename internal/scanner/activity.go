@@ -13,8 +13,25 @@ import (
 // a missing process snapshot must never authorize its removal.
 func ownerProcesses(it Item) []string {
 	if strings.HasPrefix(it.Source, "artifact:") {
-		return []string{"node", "npm", "pnpm", "yarn", "bun", "cargo", "rustc", "go", "python", "python3", "java", "gradle", "swift", "swiftc", "xcodebuild", "Xcode", "make", "cmake", "ninja", "clang", "clang++", "gcc"}
+		switch it.Owner {
+		case "Node.js":
+			return []string{"node", "npm", "pnpm", "yarn", "bun"}
+		case "Rust":
+			return []string{"cargo", "rustc", "rust-analyzer"}
+		case "Python":
+			return []string{"python", "python3", "uv", "pip", "pip3", "pytest"}
+		case "Swift", "Xcode", "CocoaPods":
+			return []string{"swift", "swiftc", "Xcode", "xcodebuild", "SourceKitService", "Simulator", "pod"}
+		case "Maven", "Gradle":
+			return []string{"java", "mvn", "gradle"}
+		case "Dart":
+			return []string{"dart", "flutter"}
+		case "CMake", "Make":
+			return []string{"make", "cmake", "ninja", "clang", "clang++", "gcc", "g++"}
+		}
+		return nil
 	}
+
 	switch it.Source {
 	case "go-build", "go-mod-cache":
 		return []string{"go", "gopls"}
@@ -44,7 +61,7 @@ func activityFromProcesses(it Item, lines string) (Activity, error) {
 	for _, line := range strings.Split(lines, "\n") {
 		executable := filepath.Base(strings.TrimSpace(line))
 		for _, name := range names {
-			if strings.EqualFold(executable, name) {
+			if strings.EqualFold(executable, name) || strings.HasPrefix(executable, name+".") || strings.HasSuffix(executable, "."+name) {
 				return Active, nil
 			}
 		}
