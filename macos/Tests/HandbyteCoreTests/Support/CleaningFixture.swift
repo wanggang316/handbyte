@@ -120,6 +120,12 @@ final class CleaningFixture {
             try? FileManager.default.removeItem(at: url)
         }
         trashed.removeAll()
+        // Tests that provoke failures leave read-only directories behind.
+        if let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) {
+            for case let url as URL in walker {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+            }
+        }
         try? FileManager.default.removeItem(at: root)
     }
 }
