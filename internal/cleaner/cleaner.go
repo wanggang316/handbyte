@@ -35,6 +35,11 @@ type Result struct {
 	EndedAt       time.Time
 }
 
+// CanRestore reports whether the recorded outcome supports an in-app restore.
+func (r Result) CanRestore() bool {
+	return r.Status == "trashed" && r.ID != "" && r.Destination != "" && r.TrashIdentity.Inode != 0 && r.JournalError == ""
+}
+
 // Progress reports incremental status while cleaning a batch.
 type Progress struct {
 	Run        uint64

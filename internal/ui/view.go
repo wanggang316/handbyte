@@ -249,6 +249,7 @@ func (m *Model) renderDone() string {
 	}
 	detail := ""
 	delta := ""
+	actions := "[j/k] Inspect [f] Retry failed [r] Rescan"
 	if m.resultCursor < len(m.cleanRes) {
 		r := m.cleanRes[m.resultCursor]
 		detail = r.Message
@@ -259,10 +260,13 @@ func (m *Model) renderDone() string {
 			delta = fmt.Sprintf("Observed volume free-space delta: %d bytes (includes other activity)", *r.FreeDelta)
 		}
 		if r.Status == "trashed" {
-			detail = "Trash: " + r.Destination + " · [u] Restore"
+			detail = strings.TrimSpace(detail + " Trash: " + r.Destination)
+			if r.CanRestore() {
+				actions += " [u] Restore"
+			}
 		}
 	}
-	lines = append(lines, display(detail), delta, display(m.notice), "[j/k] Inspect [u] Restore [f] Retry failed [r] Rescan", "[Enter/q] Exit · History: handbyte --history")
+	lines = append(lines, display(detail), delta, display(m.notice), actions, "[Enter/q] Exit · History: handbyte --history")
 	return m.frame(lines)
 }
 

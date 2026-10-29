@@ -315,7 +315,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.notice = "No eligible failed targets. Rescan to refresh evidence."
 			}
 		case "u":
-			if m.resultCursor < len(m.cleanRes) && m.cleanRes[m.resultCursor].Status == "trashed" {
+			if m.resultCursor < len(m.cleanRes) && m.cleanRes[m.resultCursor].CanRestore() {
 				m.restoring = true
 				id := m.cleanRes[m.resultCursor].ID
 				return m, func() tea.Msg { return restoredMsg{id: id, err: cleaner.Restore(context.Background(), id)} }
