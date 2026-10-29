@@ -76,3 +76,20 @@ private let sampleRule = Rule(
     #expect(skipped.status == .skipped(reason: "Symlink"))
     #expect(CleanAction.trash != CleanAction.removePermanently)
 }
+
+@Test func candidateEncodesItsLocationAsAPlainPath() throws {
+    let candidate = Candidate(
+        rule: sampleRule,
+        url: URL(filePath: "/Users/alice/Library/Application Support/x", directoryHint: .isDirectory),
+        identity: FileIdentity(dev: 1, ino: 2),
+        size: SizeReport(allocatedBytes: 10, fileCount: 1, partial: false, errorCount: 0),
+        lastActivity: nil,
+        eligibility: .eligible
+    )
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    let json = try #require(String(data: try encoder.encode(candidate), encoding: .utf8))
+    #expect(json.contains(#""path":"/Users/alice/Library/Application Support/x""#))
+    #expect(!json.contains("file:"))
+    #expect(!json.contains(#""url""#))
+}

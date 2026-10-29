@@ -68,4 +68,33 @@ public struct Candidate: Sendable, Hashable, Codable, Identifiable {
     public static func makeID(ruleID: String, identity: FileIdentity) -> String {
         "\(ruleID)@\(identity.dev):\(identity.ino)"
     }
+
+    // The location is encoded as a plain `path` string, not a `file://` URL,
+    // so the JSON joins with the Go CLI's `Path` in parity checks.
+    private enum CodingKeys: String, CodingKey {
+        case id, rule, path, identity, size, lastActivity, eligibility
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            rule: try container.decode(Rule.self, forKey: .rule),
+            url: URL(filePath: try container.decode(String.self, forKey: .path), directoryHint: .isDirectory),
+            identity: try container.decode(FileIdentity.self, forKey: .identity),
+            size: try container.decode(SizeReport.self, forKey: .size),
+            lastActivity: try container.decodeIfPresent(Date.self, forKey: .lastActivity),
+            eligibility: try container.decode(Eligibility.self, forKey: .eligibility)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(rule, forKey: .rule)
+        try container.encode(url.fileSystemPath, forKey: .path)
+        try container.encode(identity, forKey: .identity)
+        try container.encode(size, forKey: .size)
+        try container.encodeIfPresent(lastActivity, forKey: .lastActivity)
+        try container.encode(eligibility, forKey: .eligibility)
+    }
 }
