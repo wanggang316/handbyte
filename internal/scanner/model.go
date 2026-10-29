@@ -41,6 +41,15 @@ const (
 
 // Item is one cleanable target.
 type Item struct {
+	Name        string
+	Owner       string
+	Project     string
+	Scope       string
+	Identity    Identity
+	Eligibility Eligibility
+	Reason      string
+	Activity    Activity
+	ScannedAt   time.Time
 	Path        string
 	Size        int64
 	FileCount   int64
@@ -53,3 +62,27 @@ type Item struct {
 	ScanStatus string
 	ScanError  string
 }
+
+// Identity binds a reviewed candidate to a filesystem object.
+type Identity struct {
+	Device uint64
+	Inode  uint64
+}
+
+type Eligibility string
+
+const (
+	Recommended Eligibility = "recommended"
+	Review      Eligibility = "review"
+	Protected   Eligibility = "protected"
+)
+
+type Activity string
+
+const (
+	Idle    Activity = "idle"
+	Active  Activity = "active"
+	Unknown Activity = "unknown"
+)
+
+func (it Item) Selectable() bool { return it.Eligibility == Recommended || it.Eligibility == Review }

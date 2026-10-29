@@ -26,6 +26,8 @@ type Progress struct {
 
 // Config controls a scan.
 type Config struct {
+	Exclusions    []string
+	ActivityProbe ActivityProbe
 	// ProjectRoots overrides DefaultProjectRoots if non-empty.
 	ProjectRoots []string
 	// MinSize: items smaller than this are dropped from the result.
@@ -144,6 +146,9 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 	unique := tasks[:0]
 	for _, t := range tasks {
 		t.path = filepath.Clean(t.path)
+		if canonical, err := Physical(t.path); err == nil {
+			t.path = canonical
+		}
 		if seen[t.path] {
 			continue
 		}
@@ -151,6 +156,10 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		unique = append(unique, t)
 	}
 	tasks = unique
+
+	if cfg.ActivityProbe == nil {
+		cfg.ActivityProbe = processProbe(ctx)
+	}
 
 	// Now du each task concurrently.
 	var (
@@ -193,7 +202,11 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 					return
 				}
 				emit(t.path)
+				id, idErr := identity(t.path)
 				size, count, mt, scanErr := du(ctx, t.path)
+				if idErr != nil {
+					scanErr = idErr
+				}
 				bytes.Add(size)
 				files.Add(count)
 				if size < cfg.MinSize && scanErr == nil {
@@ -208,8 +221,8 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 				if ctx.Err() != nil {
 					status = "cancelled"
 				}
-				mu.Lock()
-				items = append(items, Item{
+				it := Item{
+					Identity:   id,
 					ScanStatus: status, ScanError: reason,
 					Path:        t.path,
 					Size:        size,
@@ -219,7 +232,10 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 					Safety:      t.safety,
 					Description: t.description,
 					Source:      t.source,
-				})
+				}
+				assess(ctx, &it, cfg.Exclusions, cfg.ActivityProbe)
+				mu.Lock()
+				items = append(items, it)
 				mu.Unlock()
 				emit(t.path)
 			}
