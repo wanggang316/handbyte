@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ type Progress struct {
 	FilesSeen   int64
 	ItemsFound  int
 	Done        bool
+	Items       []Item
 }
 
 // Config controls a scan.
@@ -64,6 +66,13 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		source      string
 	}
 	var tasks []task
+	var unavailable []Item
+	report := func(path string, category Category, err error) {
+		if os.IsNotExist(err) {
+			return
+		}
+		unavailable = append(unavailable, Item{Path: path, Category: category, Safety: SafetyCaution, ScanStatus: "unavailable", ScanError: err.Error()})
+	}
 
 	for _, p := range Presets {
 		expanded, ok := expandHome(p.Path)
@@ -71,12 +80,17 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 			continue
 		}
 		info, err := os.Lstat(expanded)
-		if err != nil || !info.IsDir() {
+		if err != nil {
+			report(expanded, p.Category, err)
+			continue
+		}
+		if !info.IsDir() {
 			continue
 		}
 		if p.ExpandChildren {
 			entries, err := os.ReadDir(expanded)
 			if err != nil {
+				report(expanded, p.Category, err)
 				continue
 			}
 			for _, e := range entries {
@@ -112,7 +126,7 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		for _, p := range ProjectArtifactPatterns {
 			patternByName[p.Name] = p
 		}
-		matches := findArtifacts(ctx, roots, patternByName, progress)
+		matches := findArtifacts(ctx, roots, patternByName, progress, func(path string, err error) { report(path, CatProjectBuild, err) })
 		for _, m := range matches {
 			pat := patternByName[filepath.Base(m)]
 			tasks = append(tasks, task{
@@ -125,10 +139,23 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		}
 	}
 
+	// Presets are ordered from specific rules to generic fallbacks.
+	seen := make(map[string]bool)
+	unique := tasks[:0]
+	for _, t := range tasks {
+		t.path = filepath.Clean(t.path)
+		if seen[t.path] {
+			continue
+		}
+		seen[t.path] = true
+		unique = append(unique, t)
+	}
+	tasks = unique
+
 	// Now du each task concurrently.
 	var (
 		mu       sync.Mutex
-		items    []Item
+		items    = unavailable
 		bytes    atomic.Int64
 		files    atomic.Int64
 		jobs     = make(chan task)
@@ -141,12 +168,16 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 			return
 		}
 		emitOnce.Lock()
+		mu.Lock()
+		snapshot := append([]Item(nil), items...)
+		mu.Unlock()
 		select {
 		case progress <- Progress{
 			CurrentPath: current,
 			BytesSeen:   bytes.Load(),
 			FilesSeen:   files.Load(),
-			ItemsFound:  len(items),
+			ItemsFound:  len(snapshot),
+			Items:       snapshot,
 		}:
 		default:
 		}
@@ -162,14 +193,24 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 					return
 				}
 				emit(t.path)
-				size, count, mt := du(ctx, t.path)
+				size, count, mt, scanErr := du(ctx, t.path)
 				bytes.Add(size)
 				files.Add(count)
-				if size < cfg.MinSize {
+				if size < cfg.MinSize && scanErr == nil {
 					continue
+				}
+				status := "complete"
+				reason := ""
+				if scanErr != nil {
+					status = "partial"
+					reason = scanErr.Error()
+				}
+				if ctx.Err() != nil {
+					status = "cancelled"
 				}
 				mu.Lock()
 				items = append(items, Item{
+					ScanStatus: status, ScanError: reason,
 					Path:        t.path,
 					Size:        size,
 					FileCount:   count,
@@ -184,10 +225,11 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 			}
 		}()
 	}
+dispatch:
 	for _, t := range tasks {
 		select {
 		case <-ctx.Done():
-			break
+			break dispatch
 		case jobs <- t:
 		}
 	}
@@ -215,8 +257,9 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 
 // du recursively sums the size of path. Returns (bytes, files, mostRecentMtime).
 //
-// Errors are swallowed: a permission-denied subtree just contributes zero.
-func du(ctx context.Context, path string) (int64, int64, time.Time) {
+// Incomplete measurements retain their error instead of implying an empty subtree.
+func du(ctx context.Context, path string) (int64, int64, time.Time, error) {
+	var scanErr error
 	var (
 		total int64
 		count int64
@@ -224,9 +267,13 @@ func du(ctx context.Context, path string) (int64, int64, time.Time) {
 	)
 	_ = filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
+			scanErr = ctx.Err()
 			return filepath.SkipAll
 		}
 		if err != nil {
+			if scanErr == nil {
+				scanErr = fmt.Errorf("%s: %w", p, err)
+			}
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -237,6 +284,9 @@ func du(ctx context.Context, path string) (int64, int64, time.Time) {
 		}
 		info, err := d.Info()
 		if err != nil {
+			if scanErr == nil {
+				scanErr = err
+			}
 			return nil
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
@@ -249,14 +299,14 @@ func du(ctx context.Context, path string) (int64, int64, time.Time) {
 		}
 		return nil
 	})
-	return total, count, mod
+	return total, count, mod, scanErr
 }
 
 // findArtifacts walks roots looking for directories whose basename matches
 // one of the configured project artifact patterns. When a match is found,
 // the walker does not descend into it (so we count node_modules without
 // walking into nested node_modules).
-func findArtifacts(ctx context.Context, roots []string, patterns map[string]ProjectArtifact, progress chan<- Progress) []string {
+func findArtifacts(ctx context.Context, roots []string, patterns map[string]ProjectArtifact, progress chan<- Progress, report func(string, error)) []string {
 	var (
 		found []string
 		mu    sync.Mutex
@@ -267,6 +317,7 @@ func findArtifacts(ctx context.Context, roots []string, patterns map[string]Proj
 			continue
 		}
 		if _, err := os.Stat(expanded); err != nil {
+			report(expanded, err)
 			continue
 		}
 		if progress != nil {
@@ -280,6 +331,7 @@ func findArtifacts(ctx context.Context, roots []string, patterns map[string]Proj
 				return filepath.SkipAll
 			}
 			if err != nil {
+				report(p, err)
 				if d != nil && d.IsDir() {
 					return filepath.SkipDir
 				}
