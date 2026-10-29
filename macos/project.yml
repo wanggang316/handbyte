@@ -42,8 +42,9 @@ targets:
         LSApplicationCategoryType: public.app-category.utilities
         NSHumanReadableCopyright: "Copyright 2026 Gump"
         SUFeedURL: https://handbyte.gumpw.com/appcast.xml
-        # Ticket #9 fills this with the output of Sparkle's generate_keys.
-        SUPublicEDKey: ""
+        # Public half of the EdDSA key in the maintainer's login keychain
+        # (`generate_keys -p`). The matching private key signs every update.
+        SUPublicEDKey: "bRg+MnS8YhPSuwCkPXyrJ7RvwtYGy2vH0HR+1h/IUXo="
     entitlements:
       path: App/Handbyte.entitlements
       properties:
