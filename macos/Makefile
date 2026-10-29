@@ -1,4 +1,4 @@
-.PHONY: build test generate app clean
+.PHONY: build test sync-check generate app clean
 
 DERIVED_DATA ?= .dd
 # Debug build for local runs and CI: ad-hoc identity, universal binary.
@@ -11,6 +11,9 @@ build:
 
 test:
 	swift test
+
+sync-check:
+	scripts/sync-check.sh
 
 generate:
 	xcodegen generate
