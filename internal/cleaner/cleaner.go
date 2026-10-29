@@ -37,6 +37,7 @@ type Result struct {
 
 // Progress reports incremental status while cleaning a batch.
 type Progress struct {
+	Run        uint64
 	Current    string
 	Completed  int
 	Total      int

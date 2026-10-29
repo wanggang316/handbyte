@@ -1,22 +1,21 @@
-// Package ui implements the handbyte Bubble Tea TUI.
+// Package ui implements a review-first cleanup workflow.
 package ui
 
 import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/wanggang316/handbyte/internal/cleaner"
 	"github.com/wanggang316/handbyte/internal/scanner"
+	"github.com/wanggang316/handbyte/internal/settings"
 )
 
-// phase tracks which screen is currently rendered.
 type phase int
 
 const (
@@ -28,187 +27,299 @@ const (
 	phaseDone
 )
 
-// row is a flattened list entry: either a group header or an item.
 type row struct {
 	isGroup bool
-	group   scanner.Category // valid if isGroup
-	item    *scanner.Item    // valid if !isGroup
-	groupOf scanner.Category // group the item belongs to (for hiding when collapsed)
+	group   string
+	item    *scanner.Item
+	groupOf string
 }
 
-// Model is the root Bubble Tea model.
 type Model struct {
-	cfg        scanner.Config
-	cleanMode  cleaner.Mode
-	freeBefore int64
-
-	width  int
-	height int
-
-	phase phase
-
-	spin spinner.Model
-
-	// scanning state
-	scanCtx     context.Context
-	scanCancel  context.CancelFunc
-	cleanCancel context.CancelFunc
-	scanProg    scanner.Progress
-	scanErr     error
-	scanCh      chan scanner.Progress
-	cleanCh     chan cleaner.Progress
-
-	// list state
-	items     []scanner.Item
-	collapsed map[scanner.Category]bool
-	rows      []row
-	cursor    int
-	selected  map[string]bool // path -> selected
-
-	// cleaning state
-	cleanProg cleaner.Progress
-	cleanRes  []cleaner.Result
-
-	helpOpen bool
+	detailsOpen             bool
+	detailOffset            int
+	restoring               bool
+	reviewSelected          map[string]bool
+	cfg                     scanner.Config
+	cleanMode               cleaner.Mode
+	freeBefore              int64
+	width, height           int
+	phase                   phase
+	spin                    spinner.Model
+	run                     uint64
+	scanCancel, cleanCancel context.CancelFunc
+	scanProg                scanner.Progress
+	scanErr                 error
+	scanCh                  chan scanner.Progress
+	cleanCh                 chan cleaner.Progress
+	items                   []scanner.Item
+	collapsed               map[string]bool
+	rows                    []row
+	cursor                  int
+	selected                map[string]bool
+	cleanProg               cleaner.Progress
+	cleanRes                []cleaner.Result
+	helpOpen                bool
+	query                   string
+	editingQuery            bool
+	filter                  int
+	sortMode                int
+	reviewOffset            int
+	notice                  string
+	explorePath             string
+	exploreStack            []string
+	reviewItems             []scanner.Item
+	resultCursor            int
 }
-
-// New constructs a model with sensible defaults.
-func New(cfg scanner.Config, mode cleaner.Mode, freeBefore int64) *Model {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = primary
-	return &Model{
-		cfg:        cfg,
-		cleanMode:  mode,
-		freeBefore: freeBefore,
-		spin:       sp,
-		phase:      phaseSplash,
-		collapsed:  make(map[scanner.Category]bool),
-		selected:   make(map[string]bool),
-	}
-}
-
-// Init implements tea.Model.
-func (m *Model) Init() tea.Cmd {
-	return m.spin.Tick
-}
-
-// ---- messages ----
 
 type scanStartMsg struct{}
 type scanProgressMsg scanner.Progress
 type scanDoneMsg struct {
+	run   uint64
 	items []scanner.Item
 	err   error
 }
 type cleanProgressMsg cleaner.Progress
 type cleanDoneMsg struct {
+	run     uint64
 	results []cleaner.Result
 }
+type noticeMsg string
+type restoredMsg struct {
+	id  string
+	err error
+}
 
-// Update implements tea.Model.
+func New(cfg scanner.Config, mode cleaner.Mode, freeBefore int64) *Model {
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = primary
+	return &Model{cfg: cfg, cleanMode: mode, freeBefore: freeBefore, spin: sp, collapsed: map[string]bool{}, selected: map[string]bool{}}
+}
+func (m *Model) Init() tea.Cmd {
+	if m.explorePath != "" {
+		return tea.Batch(m.spin.Tick, func() tea.Msg { return scanStartMsg{} })
+	}
+	return m.spin.Tick
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.width, m.height = msg.Width, msg.Height
 		return m, nil
-
 	case tea.KeyMsg:
 		return m.handleKey(msg)
-
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
 		return m, cmd
-
 	case scanStartMsg:
 		return m.startScan()
-
-	case scanProgressMsg:
-		m.scanProg = scanner.Progress(msg)
-		return m, m.waitScanProgress()
-
-	case scanDoneMsg:
-		m.items = msg.items
-		m.scanErr = msg.err
-		m.rebuildRows()
-		m.phase = phaseList
+	case noticeMsg:
+		m.notice = string(msg)
 		return m, nil
-
+	case restoredMsg:
+		m.restoring = false
+		if msg.err != nil {
+			m.notice = msg.err.Error()
+		} else {
+			m.notice = "Restored to the original path"
+			for i := range m.cleanRes {
+				if m.cleanRes[i].ID == msg.id {
+					m.cleanRes[i].Status = "restored"
+				}
+			}
+		}
+		return m, nil
+	case scanProgressMsg:
+		if msg.Run != m.run || m.phase != phaseScanning {
+			return m, nil
+		}
+		m.scanProg = scanner.Progress(msg)
+		if msg.Items != nil {
+			m.items = msg.Items
+			m.applyExclusions()
+			m.rebuildRows()
+		}
+		return m, m.waitScanProgress()
+	case scanDoneMsg:
+		if msg.run != m.run {
+			return m, nil
+		}
+		if m.scanCancel != nil {
+			m.scanCancel()
+			m.scanCancel = nil
+		}
+		m.items, m.scanErr = msg.items, msg.err
+		m.applyExclusions()
+		m.phase = phaseList
+		m.rebuildRows()
+		if msg.err != nil {
+			m.notice = "Scan incomplete: " + msg.err.Error()
+		}
+		return m, nil
 	case cleanProgressMsg:
-		if m.phase != phaseCleaning {
+		if msg.Run != m.run || m.phase != phaseCleaning {
 			return m, nil
 		}
 		m.cleanProg = cleaner.Progress(msg)
-		if msg.LastResult != nil {
-			m.cleanRes = append(m.cleanRes, *msg.LastResult)
-		}
 		return m, m.waitCleanProgress()
-
 	case cleanDoneMsg:
+		if msg.run != m.run {
+			return m, nil
+		}
 		if m.cleanCancel != nil {
 			m.cleanCancel()
 			m.cleanCancel = nil
 		}
 		m.cleanRes = msg.results
 		m.phase = phaseDone
+		m.resultCursor = 0
 		return m, nil
 	}
-
 	return m, nil
 }
 
-// ---- key handling ----
-
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	if m.restoring {
+		m.notice = "Waiting for restoration to finish"
+		return m, nil
+	}
+	if m.detailsOpen {
+		switch key {
+		case "esc", "enter":
+			m.detailsOpen = false
+		case "j", "down":
+			m.detailOffset++
+		case "k", "up":
+			m.detailOffset = max(0, m.detailOffset-1)
+		case "pgdown":
+			m.detailOffset += max(1, m.height-4)
+		case "pgup":
+			m.detailOffset = max(0, m.detailOffset-max(1, m.height-4))
+		}
+		return m, nil
+	}
 	if m.helpOpen {
 		m.helpOpen = false
 		return m, nil
 	}
-	switch msg.String() {
-	case "ctrl+c", "q":
+	if m.editingQuery {
+		switch key {
+		case "esc", "enter":
+			m.editingQuery = false
+		case "backspace", "ctrl+h":
+			r := []rune(m.query)
+			if len(r) > 0 {
+				m.query = string(r[:len(r)-1])
+			}
+		case "ctrl+u":
+			m.query = ""
+		default:
+			if msg.Type == tea.KeyRunes {
+				m.query += string(msg.Runes)
+			}
+		}
+		m.cursor = 0
+		m.rebuildRows()
+		return m, nil
+	}
+	if key == "q" || key == "ctrl+c" {
 		if m.phase == phaseCleaning {
 			if m.cleanCancel != nil {
 				m.cleanCancel()
 			}
+			m.notice = "Stopping after the current action finishes"
 			return m, nil
 		}
 		if m.scanCancel != nil {
 			m.scanCancel()
 		}
 		return m, tea.Quit
-	case "?":
+	}
+	if key == "?" {
 		m.helpOpen = true
 		return m, nil
 	}
-
 	switch m.phase {
 	case phaseSplash:
-		switch msg.String() {
+		switch key {
+		case "1":
+			m.cfg.Scope = "quick"
+			return m.startScan()
+		case "2":
+			m.cfg.Scope = "projects"
+			m.cfg.SkipProjectScan = false
+			return m.startScan()
+		case "3":
+			home, _ := os.UserHomeDir()
+			return m.startExplore(home)
 		case "enter", " ":
-			return m, func() tea.Msg { return scanStartMsg{} }
+			return m.startScan()
 		}
-	case phaseScanning:
-		switch msg.String() {
-		case "esc":
+	case phaseScanning, phaseList:
+		if key == "esc" && m.phase == phaseScanning {
 			if m.scanCancel != nil {
 				m.scanCancel()
 			}
+			return m, nil
 		}
-	case phaseList:
 		return m.handleListKey(msg)
 	case phaseConfirm:
-		switch msg.String() {
-		case "y", "Y", "enter":
+		switch key {
+		case "y":
 			return m.startClean()
-		case "n", "N", "esc":
+		case "n", "esc":
 			m.phase = phaseList
+		case "j", "down":
+			m.reviewOffset = min(m.reviewOffset+1, max(0, len(m.selectedItems())-m.reviewHeight()))
+		case "k", "up":
+			m.reviewOffset = max(0, m.reviewOffset-1)
+		case "pgdown":
+			m.reviewOffset = min(m.reviewOffset+m.reviewHeight(), max(0, len(m.selectedItems())-m.reviewHeight()))
+		case "pgup":
+			m.reviewOffset = max(0, m.reviewOffset-m.reviewHeight())
+		}
+	case phaseCleaning:
+		if key == "esc" && m.cleanCancel != nil {
+			m.cleanCancel()
+			m.notice = "Stopping after the current action finishes"
 		}
 	case phaseDone:
-		switch msg.String() {
-		case "enter", " ":
+		switch key {
+		case "j", "down":
+			m.resultCursor = min(max(0, len(m.cleanRes)-1), m.resultCursor+1)
+		case "k", "up":
+			m.resultCursor = max(0, m.resultCursor-1)
+		case "enter":
 			return m, tea.Quit
+		case "r":
+			m.explorePath = ""
+			return m.startScan()
+		case "f":
+			m.selected = map[string]bool{}
+			for _, r := range m.cleanRes {
+				if r.Status == "failed" || r.Status == "skipped" || r.Status == "cancelled" {
+					for _, it := range m.items {
+						if it.Path == r.Path && it.Selectable() {
+							m.selected[it.Path] = true
+						}
+					}
+				}
+			}
+			if len(m.selected) > 0 {
+				m.phase = phaseConfirm
+				m.reviewOffset = 0
+			} else {
+				m.notice = "No eligible failed targets. Rescan to refresh evidence."
+			}
+		case "u":
+			if m.resultCursor < len(m.cleanRes) && m.cleanRes[m.resultCursor].Status == "trashed" {
+				m.restoring = true
+				id := m.cleanRes[m.resultCursor].ID
+				return m, func() tea.Msg { return restoredMsg{id: id, err: cleaner.Restore(context.Background(), id)} }
+			}
 		}
 	}
 	return m, nil
@@ -223,11 +334,20 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "g", "home":
 		m.cursor = 0
 	case "G", "end":
-		m.cursor = len(m.rows) - 1
+		m.cursor = max(0, len(m.rows)-1)
 	case "pgdown", "ctrl+d":
-		m.moveCursor(10)
+		m.moveCursor(m.listHeight())
 	case "pgup", "ctrl+u":
-		m.moveCursor(-10)
+		m.moveCursor(-m.listHeight())
+	case "/":
+		m.editingQuery = true
+	case "s":
+		m.sortMode = (m.sortMode + 1) % 3
+		m.rebuildRows()
+	case "f":
+		m.filter = (m.filter + 1) % 4
+		m.cursor = 0
+		m.rebuildRows()
 	case " ":
 		m.toggleAtCursor()
 	case "a":
@@ -235,630 +355,465 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "A":
 		m.toggleAllSafe()
 	case "c":
-		for k := range m.selected {
-			delete(m.selected, k)
-		}
+		m.selected = map[string]bool{}
 	case "enter":
-		m.toggleCollapseAtCursor()
-	case "d":
-		if len(m.selectedItems()) > 0 {
-			m.phase = phaseConfirm
+		if it := m.currentItem(); it != nil && m.explorePath != "" && it.IsDir {
+			m.exploreStack = append(m.exploreStack, m.explorePath)
+			return m.startExplore(it.Path)
 		}
+		if m.currentItem() != nil {
+			m.detailsOpen = true
+			m.detailOffset = 0
+		} else {
+			m.toggleCollapseAtCursor()
+		}
+	case "e":
+		if it := m.currentItem(); it != nil && it.IsDir {
+			if m.explorePath == "" {
+				m.reviewItems = append([]scanner.Item(nil), m.items...)
+				m.reviewSelected = m.selected
+			} else {
+				m.exploreStack = append(m.exploreStack, m.explorePath)
+			}
+			return m.startExplore(it.Path)
+		}
+	case "backspace":
+		if len(m.exploreStack) > 0 {
+			n := len(m.exploreStack) - 1
+			path := m.exploreStack[n]
+			m.exploreStack = m.exploreStack[:n]
+			return m.startExplore(path)
+		}
+		return m.leaveExplore()
+	case "esc":
+		return m.leaveExplore()
+	case "o":
+		if it := m.currentItem(); it != nil {
+			path := it.Path
+			return m, func() tea.Msg {
+				if err := exec.Command("/usr/bin/open", "-R", path).Run(); err != nil {
+					return noticeMsg(err.Error())
+				}
+				return noticeMsg("Revealed in Finder")
+			}
+		}
+	case "p":
+		m.protectCurrent()
+	case "d":
+		if m.phase == phaseList && len(m.selectedItems()) > 0 {
+			m.phase = phaseConfirm
+			m.reviewOffset = 0
+		}
+	case "r":
+		if m.explorePath != "" {
+			return m.startExplore(m.explorePath)
+		}
+		return m.startScan()
 	}
 	return m, nil
 }
 
-func (m *Model) moveCursor(delta int) {
-	if len(m.rows) == 0 {
-		return
+func (m *Model) leaveExplore() (tea.Model, tea.Cmd) {
+	if m.explorePath == "" {
+		m.query = ""
+		m.filter = 0
+		m.rebuildRows()
+		return m, nil
 	}
-	m.cursor += delta
-	if m.cursor < 0 {
-		m.cursor = 0
+	if m.scanCancel != nil {
+		m.scanCancel()
 	}
-	if m.cursor >= len(m.rows) {
-		m.cursor = len(m.rows) - 1
+	m.run++
+	m.explorePath = ""
+	m.exploreStack = nil
+	m.query = ""
+	m.filter = 0
+	m.cursor = 0
+	m.items = m.reviewItems
+	for i := range m.items {
+		if scanner.Excluded(m.items[i].Path, m.cfg.Exclusions) {
+			m.items[i].Eligibility = scanner.Protected
+			m.items[i].Reason = "Protected by an exclusion"
+		}
 	}
-}
-
-func (m *Model) toggleAtCursor() {
-	if m.cursor < 0 || m.cursor >= len(m.rows) {
-		return
+	if m.reviewSelected != nil {
+		m.selected = m.reviewSelected
+		m.reviewSelected = nil
 	}
-	r := m.rows[m.cursor]
-	if r.isGroup {
-		m.toggleGroup(r.group)
-		return
-	}
-	if m.selected[r.item.Path] {
-		delete(m.selected, r.item.Path)
+	m.reviewItems = nil
+	if m.items == nil {
+		m.phase = phaseSplash
 	} else {
-		m.selected[r.item.Path] = true
+		m.phase = phaseList
+		m.rebuildRows()
 	}
+	return m, nil
 }
 
+func (m *Model) currentItem() *scanner.Item {
+	if m.cursor < 0 || m.cursor >= len(m.rows) || m.rows[m.cursor].isGroup {
+		return nil
+	}
+	return m.rows[m.cursor].item
+}
+func (m *Model) moveCursor(delta int) { m.cursor = max(0, min(len(m.rows)-1, m.cursor+delta)) }
+func (m *Model) selectItem(it *scanner.Item) {
+	if !it.Selectable() {
+		return
+	}
+	if m.selected[it.Path] {
+		delete(m.selected, it.Path)
+		return
+	}
+	for path := range m.selected {
+		if scanner.Contains(path, it.Path) || scanner.Contains(it.Path, path) {
+			delete(m.selected, path)
+		}
+	}
+	m.selected[it.Path] = true
+}
+func (m *Model) toggleAtCursor() {
+	if it := m.currentItem(); it != nil {
+		m.selectItem(it)
+	} else {
+		m.toggleGroupAtCursor()
+	}
+}
 func (m *Model) toggleGroupAtCursor() {
-	if m.cursor < 0 || m.cursor >= len(m.rows) {
-		return
-	}
-	r := m.rows[m.cursor]
-	cat := r.group
-	if !r.isGroup {
-		cat = r.groupOf
-	}
-	m.toggleGroup(cat)
-}
-
-func (m *Model) toggleGroup(cat scanner.Category) {
-	// If any item in the group is unselected, select all; otherwise unselect all.
-	allSel := true
-	for _, it := range m.items {
-		if it.Category != cat {
-			continue
+	if m.cursor >= 0 && m.cursor < len(m.rows) {
+		r := m.rows[m.cursor]
+		group := r.group
+		if !r.isGroup {
+			group = r.groupOf
 		}
-		if !m.selected[it.Path] {
-			allSel = false
-			break
-		}
-	}
-	for _, it := range m.items {
-		if it.Category != cat {
-			continue
-		}
-		if allSel {
-			delete(m.selected, it.Path)
-		} else {
-			m.selected[it.Path] = true
-		}
+		m.toggleGroup(group)
 	}
 }
-
-func (m *Model) toggleAllSafe() {
-	anyUnsel := false
+func (m *Model) toggleGroup(group string) {
+	all := true
 	for _, it := range m.items {
-		if it.Safety == scanner.SafetyAuto && !m.selected[it.Path] {
-			anyUnsel = true
-			break
+		if itemGroup(it) == group && m.matchesFilter(it) && it.Selectable() && !m.selected[it.Path] {
+			all = false
 		}
 	}
-	for _, it := range m.items {
-		if it.Safety != scanner.SafetyAuto {
-			continue
-		}
-		if anyUnsel {
-			m.selected[it.Path] = true
-		} else {
-			delete(m.selected, it.Path)
-		}
-	}
-}
-
-func (m *Model) toggleCollapseAtCursor() {
-	if m.cursor < 0 || m.cursor >= len(m.rows) {
-		return
-	}
-	r := m.rows[m.cursor]
-	if !r.isGroup {
-		return
-	}
-	m.collapsed[r.group] = !m.collapsed[r.group]
-	m.rebuildRows()
-}
-
-// ---- list shaping ----
-
-func (m *Model) rebuildRows() {
-	// Group items by category, keeping size-sorted order within each.
-	byCat := make(map[scanner.Category][]*scanner.Item)
 	for i := range m.items {
 		it := &m.items[i]
-		byCat[it.Category] = append(byCat[it.Category], it)
-	}
-	// Order categories by total size desc.
-	type catTotal struct {
-		cat   scanner.Category
-		bytes int64
-	}
-	var cats []catTotal
-	for c, list := range byCat {
-		var sum int64
-		for _, it := range list {
-			sum += it.Size
-		}
-		cats = append(cats, catTotal{c, sum})
-	}
-	sort.Slice(cats, func(i, j int) bool { return cats[i].bytes > cats[j].bytes })
-
-	m.rows = m.rows[:0]
-	for _, c := range cats {
-		m.rows = append(m.rows, row{isGroup: true, group: c.cat})
-		if m.collapsed[c.cat] {
+		if itemGroup(*it) != group || !m.matchesFilter(*it) || !it.Selectable() {
 			continue
 		}
-		for _, it := range byCat[c.cat] {
-			m.rows = append(m.rows, row{item: it, groupOf: c.cat})
+		if all {
+			delete(m.selected, it.Path)
+		} else if !m.selected[it.Path] {
+			m.selectItem(it)
 		}
 	}
-	if m.cursor >= len(m.rows) {
-		m.cursor = len(m.rows) - 1
+}
+func (m *Model) matchesFilter(it scanner.Item) bool {
+	if m.filter > 0 && it.Eligibility != []scanner.Eligibility{"", scanner.Recommended, scanner.Review, scanner.Protected}[m.filter] {
+		return false
 	}
-	if m.cursor < 0 {
-		m.cursor = 0
+	return m.query == "" || strings.Contains(strings.ToLower(it.Path+" "+it.Name+" "+it.Owner+" "+it.Description), strings.ToLower(m.query))
+}
+func (m *Model) toggleAllSafe() {
+	all := true
+	for _, it := range m.items {
+		if it.Eligibility == scanner.Recommended && !m.selected[it.Path] {
+			all = false
+		}
+	}
+	for i := range m.items {
+		it := &m.items[i]
+		if it.Eligibility != scanner.Recommended {
+			continue
+		}
+		if all {
+			delete(m.selected, it.Path)
+		} else if !m.selected[it.Path] {
+			m.selectItem(it)
+		}
+	}
+}
+func (m *Model) toggleCollapseAtCursor() {
+	if m.cursor >= 0 && m.cursor < len(m.rows) && m.rows[m.cursor].isGroup {
+		g := m.rows[m.cursor].group
+		m.collapsed[g] = !m.collapsed[g]
+		m.rebuildRows()
 	}
 }
 
+func itemGroup(it scanner.Item) string {
+	owner := it.Owner
+	if it.Project != "" {
+		owner = condensePath(it.Project)
+	}
+	if owner == "" {
+		owner = string(it.Category)
+	}
+	label := "Protected / inspect"
+	if it.Eligibility == scanner.Recommended {
+		label = "Recommended"
+	} else if it.Eligibility == scanner.Review {
+		label = "Review"
+	}
+	return label + " · " + owner
+}
+func (m *Model) rebuildRows() {
+	current := ""
+	if it := m.currentItem(); it != nil {
+		current = it.Path
+	}
+	groups := map[string][]*scanner.Item{}
+	order := []string{}
+	for i := range m.items {
+		it := &m.items[i]
+		if !m.matchesFilter(*it) {
+			continue
+		}
+		g := itemGroup(*it)
+		if _, ok := groups[g]; !ok {
+			order = append(order, g)
+		}
+		groups[g] = append(groups[g], it)
+	}
+	rank := func(g string) int {
+		if strings.HasPrefix(g, "Recommended") {
+			return 0
+		}
+		if strings.HasPrefix(g, "Review") {
+			return 1
+		}
+		return 2
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		if rank(order[i]) != rank(order[j]) {
+			return rank(order[i]) < rank(order[j])
+		}
+		return order[i] < order[j]
+	})
+	m.rows = nil
+	for _, g := range order {
+		sort.SliceStable(groups[g], func(i, j int) bool {
+			a, b := groups[g][i], groups[g][j]
+			switch m.sortMode {
+			case 1:
+				return a.Name < b.Name
+			case 2:
+				return a.ModTime.Before(b.ModTime)
+			}
+			if a.Size == b.Size {
+				return a.Path < b.Path
+			}
+			return a.Size > b.Size
+		})
+		m.rows = append(m.rows, row{isGroup: true, group: g})
+		if m.collapsed[g] {
+			continue
+		}
+		for _, it := range groups[g] {
+			m.rows = append(m.rows, row{item: it, groupOf: g})
+		}
+	}
+	m.cursor = max(0, min(m.cursor, len(m.rows)-1))
+	for i, r := range m.rows {
+		if current != "" && !r.isGroup && r.item.Path == current {
+			m.cursor = i
+			break
+		}
+	}
+}
 func (m *Model) selectedItems() []scanner.Item {
-	var out []scanner.Item
+	out := []scanner.Item{}
+	seen := map[string]bool{}
 	for _, it := range m.items {
-		if m.selected[it.Path] {
+		if m.selected[it.Path] && it.Selectable() && !seen[it.Path] {
+			seen[it.Path] = true
 			out = append(out, it)
 		}
 	}
 	return out
 }
-
 func (m *Model) selectedTotal() int64 {
-	var sum int64
-	for _, it := range m.items {
-		if m.selected[it.Path] {
-			sum += it.Size
+	var total int64
+	for _, it := range m.selectedItems() {
+		total += it.Size
+	}
+	return total
+}
+
+func (m *Model) protectCurrent() {
+	it := m.currentItem()
+	if it == nil {
+		return
+	}
+	cfg, err := settings.Load()
+	if err != nil {
+		m.notice = err.Error()
+		return
+	}
+	found := false
+	paths := []string{}
+	for _, path := range cfg.Exclusions {
+		if path == it.Path {
+			found = true
+		} else {
+			paths = append(paths, path)
 		}
 	}
-	return sum
+	if !found {
+		paths = append(paths, it.Path)
+	}
+	cfg.Exclusions = paths
+	if err := settings.Save(cfg); err != nil {
+		m.notice = err.Error()
+		return
+	}
+	m.cfg.Exclusions = paths
+	if found {
+		m.notice = "Protection removed. Rescan to refresh eligibility."
+	} else {
+		m.notice = "Path protected for future scans"
+		for i := range m.items {
+			if scanner.Excluded(m.items[i].Path, paths) {
+				m.items[i].Eligibility = scanner.Protected
+				m.items[i].Reason = "Protected by an exclusion"
+				delete(m.selected, m.items[i].Path)
+			}
+		}
+	}
+	m.rebuildRows()
 }
 
-// ---- scan & clean commands ----
-
+func (m *Model) startExplore(path string) (tea.Model, tea.Cmd) {
+	m.explorePath = path
+	return m.startScan()
+}
 func (m *Model) startScan() (tea.Model, tea.Cmd) {
+	if m.scanCancel != nil {
+		m.scanCancel()
+	}
+	m.run++
+	run := m.run
 	m.phase = phaseScanning
+	m.scanErr = nil
+	m.notice = ""
+	m.scanProg = scanner.Progress{}
+	m.items = nil
+	m.cursor = 0
+	m.query = ""
+	m.filter = 0
+	m.selected = map[string]bool{}
 	ctx, cancel := context.WithCancel(context.Background())
-	m.scanCtx, m.scanCancel = ctx, cancel
-	m.scanCh = make(chan scanner.Progress, 64)
-	ch := m.scanCh
-	prog := teaProgram
-	go func() {
-		items, err := scanner.Scan(ctx, m.cfg, ch)
-		prog.Send(scanDoneMsg{items: items, err: err})
-	}()
-	return m, waitProgress(ch, func(p scanner.Progress) tea.Msg { return scanProgressMsg(p) })
+	m.scanCancel = cancel
+	ch := make(chan scanner.Progress, 16)
+	m.scanCh = ch
+	cfg := m.cfg
+	explore := m.explorePath
+	work := func() tea.Msg {
+		var items []scanner.Item
+		var err error
+		if explore != "" {
+			items, err = scanner.Explore(ctx, explore, ch)
+		} else {
+			items, err = scanner.Scan(ctx, cfg, ch)
+		}
+		return scanDoneMsg{run: run, items: items, err: err}
+	}
+	return m, tea.Batch(work, m.waitScanProgress())
 }
-
 func (m *Model) startClean() (tea.Model, tea.Cmd) {
+	m.run++
+	run := m.run
 	m.phase = phaseCleaning
+	m.cleanRes = nil
+	m.notice = ""
+	m.cleanProg = cleaner.Progress{}
 	items := m.selectedItems()
+	opts := cleaner.Options{Mode: m.cleanMode, Exclusions: append([]string(nil), m.cfg.Exclusions...)}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cleanCancel = cancel
-	m.cleanCh = make(chan cleaner.Progress, 32)
-	ch := m.cleanCh
-	prog := teaProgram
-	go func() {
-		results := cleaner.Execute(ctx, items, cleaner.Options{Mode: m.cleanMode, Exclusions: m.cfg.Exclusions}, ch)
-		prog.Send(cleanDoneMsg{results: results})
-	}()
-	return m, waitProgress(ch, func(p cleaner.Progress) tea.Msg { return cleanProgressMsg(p) })
+	ch := make(chan cleaner.Progress, 16)
+	m.cleanCh = ch
+	return m, tea.Batch(func() tea.Msg { return cleanDoneMsg{run: run, results: cleaner.Execute(ctx, items, opts, ch)} }, m.waitCleanProgress())
 }
-
-// waitProgress returns a Cmd that reads one value from ch and wraps it as a
-// tea.Msg via convert. When the channel is closed it returns nil (no-op).
-func waitProgress[T any](ch <-chan T, convert func(T) tea.Msg) tea.Cmd {
+func (m *Model) waitScanProgress() tea.Cmd {
+	ch, run := m.scanCh, m.run
 	return func() tea.Msg {
 		p, ok := <-ch
 		if !ok {
 			return nil
 		}
-		return convert(p)
+		p.Run = run
+		return scanProgressMsg(p)
 	}
 }
-
-func (m *Model) waitScanProgress() tea.Cmd {
-	return waitProgress(m.scanCh, func(p scanner.Progress) tea.Msg { return scanProgressMsg(p) })
-}
-
 func (m *Model) waitCleanProgress() tea.Cmd {
-	return waitProgress(m.cleanCh, func(p cleaner.Progress) tea.Msg { return cleanProgressMsg(p) })
-}
-
-// ---- View ----
-
-func (m *Model) View() string {
-	if m.width == 0 {
-		return "loading…"
-	}
-	if m.helpOpen {
-		return m.renderHelp()
-	}
-	switch m.phase {
-	case phaseSplash:
-		return m.renderSplash()
-	case phaseScanning:
-		return m.renderScanning()
-	case phaseList:
-		return m.renderList()
-	case phaseConfirm:
-		return m.renderConfirm()
-	case phaseCleaning:
-		return m.renderCleaning()
-	case phaseDone:
-		return m.renderDone()
-	}
-	return ""
-}
-
-func (m *Model) renderSplash() string {
-	title := titleStyle.Render("handbyte")
-	sub := mutedStyle.Render("macOS disk cleanup, with eyes open.")
-	modeLabel := "move to Trash"
-	switch m.cleanMode {
-	case cleaner.ModeRemove:
-		modeLabel = dangerStyle.Render("rm -rf") + " (irrevocable)"
-	case cleaner.ModeDryRun:
-		modeLabel = accentStyle.Render("dry-run") + " (no files touched)"
-	}
-	body := strings.Join([]string{
-		title,
-		sub,
-		"",
-		"  free space   " + humanBytes(m.freeBefore),
-		"  delete mode  " + modeLabel,
-		"",
-		subtleStyle.Render("  scans Xcode, dev caches, project artifacts, VMs, …"),
-		"",
-		"  " + primary.Render("[enter]") + " start scan      " + mutedStyle.Render("[q] quit   [?] help"),
-	}, "\n")
-	return lipgloss.NewStyle().Padding(2, 2).Render(body)
-}
-
-func (m *Model) renderScanning() string {
-	header := titleStyle.Render("handbyte") + "  " + mutedStyle.Render("scanning…")
-	stats := fmt.Sprintf(
-		"  %s   %s in %s files, %d items so far",
-		m.spin.View(),
-		accentStyle.Render(humanBytes(m.scanProg.BytesSeen)),
-		formatInt(m.scanProg.FilesSeen),
-		m.scanProg.ItemsFound,
-	)
-	current := mutedStyle.Render("  " + truncate(m.scanProg.CurrentPath, m.width-4))
-	footer := mutedStyle.Render("  [esc] cancel   [q] quit")
-	return strings.Join([]string{header, "", stats, current, "", footer}, "\n")
-}
-
-func (m *Model) renderList() string {
-	header := m.renderHeader()
-	body := m.renderRows()
-	footer := m.renderFooter()
-	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
-}
-
-func (m *Model) renderHeader() string {
-	selCount := len(m.selectedItems())
-	totalCount := len(m.items)
-	var total int64
-	for _, it := range m.items {
-		total += it.Size
-	}
-	left := titleStyle.Render("handbyte") + "  " +
-		mutedStyle.Render(fmt.Sprintf("%d items, %s found", totalCount, humanBytes(total)))
-	right := ""
-	if selCount > 0 {
-		right = accentStyle.Render(fmt.Sprintf("%d selected · %s", selCount, humanBytes(m.selectedTotal())))
-	} else {
-		right = mutedStyle.Render("nothing selected")
-	}
-	pad := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2
-	if pad < 1 {
-		pad = 1
-	}
-	return headerStyle.Width(m.width).Render(left + strings.Repeat(" ", pad) + right)
-}
-
-func (m *Model) renderRows() string {
-	contentH := m.height - 4 // header + footer
-	if contentH < 5 {
-		contentH = 5
-	}
-	// scroll window around cursor
-	start := 0
-	if m.cursor >= contentH {
-		start = m.cursor - contentH + 1
-	}
-	end := start + contentH
-	if end > len(m.rows) {
-		end = len(m.rows)
-	}
-
-	var b strings.Builder
-	for i := start; i < end; i++ {
-		r := m.rows[i]
-		line := m.renderRow(r, i == m.cursor)
-		b.WriteString(line)
-		b.WriteByte('\n')
-	}
-	// Pad remaining lines so the footer stays anchored.
-	for i := end - start; i < contentH; i++ {
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
-func (m *Model) renderRow(r row, cursor bool) string {
-	if r.isGroup {
-		marker := "▾"
-		if m.collapsed[r.group] {
-			marker = "▸"
+	ch, run := m.cleanCh, m.run
+	return func() tea.Msg {
+		p, ok := <-ch
+		if !ok {
+			return nil
 		}
-		// Count + total for the group.
-		var bytes int64
-		var count int
-		for _, it := range m.items {
-			if it.Category == r.group {
-				bytes += it.Size
-				count++
-			}
-		}
-		text := fmt.Sprintf(" %s  %s  %s  %s",
-			marker,
-			groupStyle.Render(string(r.group)),
-			mutedStyle.Render(fmt.Sprintf("(%d)", count)),
-			accentStyle.Render(humanBytes(bytes)),
-		)
-		if cursor {
-			return rowCursorStyle.Width(m.width).Render(text)
-		}
-		return text
-	}
-
-	it := r.item
-	check := "[ ]"
-	if m.selected[it.Path] {
-		check = primary.Render("[✓]")
-	}
-	badge := safetyBadge(it.Safety)
-	size := accentStyle.Render(rightPad(humanBytes(it.Size), 8))
-	path := condensePath(it.Path)
-	desc := subtleStyle.Render("· " + it.Description)
-	// Width-bound the path so the row doesn't wrap.
-	avail := m.width - 4 - 3 - 8 - 8 - 2
-	if avail < 20 {
-		avail = 20
-	}
-	pathPart := truncate(path, avail)
-	text := fmt.Sprintf("    %s %s %s %s", check, badge, size, pathPart)
-	if cursor {
-		text = text + " " + desc
-		return rowCursorStyle.Width(m.width).Render(text)
-	}
-	return text + " " + desc
-}
-
-func (m *Model) renderFooter() string {
-	keys := []string{
-		primary.Render("[space]") + " toggle",
-		primary.Render("[a]") + " group",
-		primary.Render("[A]") + " all safe",
-		primary.Render("[c]") + " clear",
-		primary.Render("[enter]") + " collapse",
-		primary.Render("[d]") + " delete",
-		mutedStyle.Render("[q] quit  [?] help"),
-	}
-	return footerStyle.Width(m.width).Render("  " + strings.Join(keys, "  "))
-}
-
-func (m *Model) renderConfirm() string {
-	sel := m.selectedItems()
-	total := m.selectedTotal()
-	verb := "Move to Trash"
-	switch m.cleanMode {
-	case cleaner.ModeRemove:
-		verb = dangerStyle.Render("Permanently delete")
-	case cleaner.ModeDryRun:
-		verb = accentStyle.Render("Dry-run (no changes)")
-	}
-	lines := []string{
-		titleStyle.Render("Confirm"),
-		"",
-		fmt.Sprintf("  %s %d items totalling %s ?", verb, len(sel), accentStyle.Render(humanBytes(total))),
-		"",
-	}
-	// Preview the top 8 items.
-	preview := sel
-	if len(preview) > 8 {
-		preview = preview[:8]
-	}
-	for _, it := range preview {
-		lines = append(lines, fmt.Sprintf("    %s  %s", rightPad(humanBytes(it.Size), 8), condensePath(it.Path)))
-	}
-	if len(sel) > len(preview) {
-		lines = append(lines, mutedStyle.Render(fmt.Sprintf("    … and %d more", len(sel)-len(preview))))
-	}
-	lines = append(lines, "", "  "+primary.Render("[y]")+" confirm    "+mutedStyle.Render("[n] cancel"))
-
-	box := dialogStyle.Render(strings.Join(lines, "\n"))
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
-}
-
-func (m *Model) renderCleaning() string {
-	header := titleStyle.Render("handbyte") + "  " + mutedStyle.Render("cleaning…")
-	pct := 0.0
-	if m.cleanProg.Total > 0 {
-		pct = float64(m.cleanProg.Completed) / float64(m.cleanProg.Total)
-	}
-	bar := progressBar(pct, m.width-12)
-	stats := fmt.Sprintf("  %s  %d / %d   %s freed",
-		m.spin.View(),
-		m.cleanProg.Completed, m.cleanProg.Total,
-		accentStyle.Render(humanBytes(m.cleanProg.BytesFreed)),
-	)
-	current := mutedStyle.Render("  " + truncate(m.cleanProg.Current, m.width-4))
-	return strings.Join([]string{header, "", "  " + bar, stats, current}, "\n")
-}
-
-func (m *Model) renderDone() string {
-	var freed, previewed, moved int64
-	failed := 0
-	for _, r := range m.cleanRes {
-		if r.Err == nil {
-			freed += r.Freed
-			previewed += r.Previewed
-			moved += r.Moved
-		} else {
-			failed++
-		}
-	}
-	title := accentStyle.Render("✓ done")
-	lines := []string{
-		titleStyle.Render("handbyte") + "  " + title,
-		"",
-		fmt.Sprintf("  processed %d items", len(m.cleanRes)-failed),
-		fmt.Sprintf("  previewed         %s (no changes)", humanBytes(previewed)),
-		fmt.Sprintf("  moved to Trash    %s (space not reclaimed)", humanBytes(moved)),
-		fmt.Sprintf("  removed estimate  %s", humanBytes(freed)),
-	}
-	if failed > 0 {
-		lines = append(lines, dangerStyle.Render(fmt.Sprintf("  failed  %d  (permission / busy)", failed)))
-	}
-	lines = append(lines, "", mutedStyle.Render("  [enter] exit"))
-	return strings.Join(lines, "\n")
-}
-
-func (m *Model) renderHelp() string {
-	lines := []string{
-		titleStyle.Render("handbyte help"),
-		"",
-		"  j/↓  k/↑       navigate",
-		"  g G            jump to top / bottom",
-		"  space          toggle selection",
-		"  a              toggle whole group",
-		"  A              toggle all auto-safe items",
-		"  c              clear selection",
-		"  enter          collapse / expand group",
-		"  d              delete selected",
-		"  q / ctrl+c     quit",
-		"  ?              this help (any key dismisses)",
-		"",
-		mutedStyle.Render("  press any key to return"),
-	}
-	box := dialogStyle.Render(strings.Join(lines, "\n"))
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
-}
-
-// ---- helpers ----
-
-func safetyBadge(s scanner.Safety) string {
-	switch s {
-	case scanner.SafetyAuto:
-		return badgeSafe
-	case scanner.SafetyReview:
-		return badgeReview
-	default:
-		return badgeCaution
+		p.Run = run
+		return cleanProgressMsg(p)
 	}
 }
 
-func humanBytes(n int64) string {
-	const (
-		k = 1024
-		M = k * 1024
-		G = M * 1024
-		T = G * 1024
-	)
-	switch {
-	case n >= T:
-		return fmt.Sprintf("%.2f TiB", float64(n)/T)
-	case n >= G:
-		return fmt.Sprintf("%.2f GiB", float64(n)/G)
-	case n >= M:
-		return fmt.Sprintf("%.1f MiB", float64(n)/M)
-	case n >= k:
-		return fmt.Sprintf("%.1f KiB", float64(n)/k)
-	}
-	return fmt.Sprintf("%d B", n)
-}
-
-func formatInt(n int64) string {
-	s := fmt.Sprintf("%d", n)
-	if len(s) <= 3 {
-		return s
-	}
-	var b strings.Builder
-	pre := len(s) % 3
-	if pre > 0 {
-		b.WriteString(s[:pre])
-		if len(s) > pre {
-			b.WriteByte(',')
-		}
-	}
-	for i := pre; i < len(s); i += 3 {
-		b.WriteString(s[i : i+3])
-		if i+3 < len(s) {
-			b.WriteByte(',')
-		}
-	}
-	return b.String()
-}
-
-func truncate(s string, max int) string {
-	if max <= 0 {
-		return ""
-	}
-	if lipgloss.Width(s) <= max {
-		return s
-	}
-	if max <= 1 {
-		return "…"
-	}
-	r := []rune(s)
-	// rough: trim from the left so the tail stays visible (paths).
-	for len(r) > 0 && lipgloss.Width(string(r))+1 > max {
-		r = r[1:]
-	}
-	return "…" + string(r)
-}
-
-func rightPad(s string, n int) string {
-	if lipgloss.Width(s) >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-lipgloss.Width(s))
-}
-
-func condensePath(p string) string {
-	if home, err := homeDir(); err == nil && strings.HasPrefix(p, home) {
-		return "~" + p[len(home):]
-	}
-	return p
-}
-
-func progressBar(pct float64, width int) string {
-	if width < 4 {
-		width = 4
-	}
-	if pct < 0 {
-		pct = 0
-	}
-	if pct > 1 {
-		pct = 1
-	}
-	filled := int(float64(width) * pct)
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-	return primary.Render(bar) + fmt.Sprintf("  %3.0f%%", pct*100)
-}
-
-// ---- program plumbing ----
-//
-// Scanner & cleaner emit streams of Progress values via channels. Bubble Tea
-// commands are pure, so we bridge by holding the active program reference
-// and reading from per-model channels via tea.Cmd.
-
-var teaProgram *tea.Program
-
-// Run starts the TUI. It blocks until the user exits.
 func Run(cfg scanner.Config, mode cleaner.Mode, freeBefore int64) error {
-	m := New(cfg, mode, freeBefore)
-	teaProgram = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	_, err := teaProgram.Run()
+	p := tea.NewProgram(New(cfg, mode, freeBefore), tea.WithAltScreen())
+	_, err := p.Run()
 	return err
 }
 
-func homeDir() (string, error) {
-	return os.UserHomeDir()
+func (m *Model) scopeLabel() string {
+	if m.explorePath != "" {
+		return "Explore · " + condensePath(m.explorePath)
+	}
+	if m.cfg.Scope == "projects" {
+		return "Projects"
+	}
+	if m.cfg.Scope == "quick" || m.cfg.SkipProjectScan {
+		return "Quick cleanup"
+	}
+	return "All cleanup candidates"
+}
+func (m *Model) actionLabel() string {
+	switch m.cleanMode {
+	case cleaner.ModeDryRun:
+		return "Preview only"
+	case cleaner.ModeRemove:
+		return "Permanently delete"
+	}
+	return "Move to Trash"
+}
+func (m *Model) reviewHeight() int { return max(1, m.height-8) }
+func (m *Model) listHeight() int   { return max(1, m.height-12) }
+
+// Keep action text distinct from observed free-space changes.
+func resultSummary(results []cleaner.Result) string {
+	var preview, moved, removed int64
+	for _, r := range results {
+		preview += r.Previewed
+		moved += r.Moved
+		removed += r.Freed
+	}
+	return fmt.Sprintf("Preview %s · Trash %s · Removed estimate %s", humanBytes(preview), humanBytes(moved), humanBytes(removed))
+
+}
+
+func RunExplore(cfg scanner.Config, mode cleaner.Mode, freeBefore int64, path string) error {
+	m := New(cfg, mode, freeBefore)
+	m.explorePath = path
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
+func (m *Model) applyExclusions() {
+	for i := range m.items {
+		if scanner.Excluded(m.items[i].Path, m.cfg.Exclusions) {
+			m.items[i].Eligibility = scanner.Protected
+			m.items[i].Reason = "Protected by an exclusion"
+			delete(m.selected, m.items[i].Path)
+		}
+	}
 }
