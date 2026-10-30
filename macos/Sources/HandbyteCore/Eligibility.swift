@@ -17,8 +17,9 @@ public struct PolicyContext: Sendable {
     }
 }
 
-/// The safety gate. The scanner runs it once to label candidates and the
-/// cleaner runs it again immediately before each action.
+/// The safety gate. The scanner labels every candidate `eligible`; the app
+/// applies the policy to the finished scan and the cleaner runs it again
+/// immediately before each action.
 ///
 /// Checks run in this order and the first failure wins:
 /// 1. user exclusion;
