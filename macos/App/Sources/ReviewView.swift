@@ -14,6 +14,7 @@ struct ReviewView: View {
         NavigationSplitView {
             list
                 .navigationSplitViewColumnWidth(min: 420, ideal: 520)
+                .toolbar { sidebarToolbar }
         } detail: {
             if let candidate = highlightedCandidate {
                 CandidateDetailView(candidate: candidate)
@@ -23,7 +24,6 @@ struct ReviewView: View {
             }
         }
         .searchable(text: $store.reviewList.query, placement: .toolbar, prompt: "Search path or rule")
-        .toolbar { toolbar }
         .safeAreaInset(edge: .bottom) { footer }
         .sheet(isPresented: $store.isConfirming) {
             ConfirmSheet(candidates: store.selection.selectedCandidates)
@@ -77,8 +77,9 @@ struct ReviewView: View {
         )
     }
 
+    /// Sort and rescan sit above the list; the detail column keeps the search field.
     @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
+    private var sidebarToolbar: some ToolbarContent {
         ToolbarItemGroup {
             @Bindable var store = store
             Picker("Sort", selection: $store.reviewList.sortOrder) {
