@@ -16,6 +16,7 @@ struct ContentView: View {
                 ReportView(report: report)
             }
         }
+        .safeAreaInset(edge: .top, spacing: 0) { FullDiskAccessBanner() }
         .frame(minWidth: 900, minHeight: 560)
     }
 }

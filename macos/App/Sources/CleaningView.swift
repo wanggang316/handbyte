@@ -9,8 +9,9 @@ struct CleaningView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Moving to Trash…")
+                Text(run.action == .removePermanently ? "Deleting permanently…" : "Moving to Trash…")
                     .font(.title2.weight(.semibold))
+                    .foregroundStyle(run.action == .removePermanently ? .red : .primary)
                 Spacer()
                 Button("Cancel", action: store.cancelClean)
                     .keyboardShortcut(.cancelAction)

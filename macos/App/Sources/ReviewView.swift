@@ -45,6 +45,8 @@ struct ReviewView: View {
                             .tag(candidate.id)
                             .contextMenu {
                                 Button("Reveal in Finder") { store.reveal(candidate) }
+                                Button("Never Clean This") { store.exclude(candidate) }
+                                    .disabled(store.isExcluded(candidate))
                             }
                     }
                 } header: {
@@ -103,12 +105,21 @@ struct ReviewView: View {
                 Label("Scan cancelled: the list is incomplete", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             }
+            if store.scanLackedFullDiskAccess {
+                MissingAccessNote()
+            }
             Spacer()
             Text("\(store.selection.selectedIDs.count) selected, \(ByteFormat.string(store.selection.selectedBytes))")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-            Button("Move to Trash…", action: store.requestConfirmation)
-                .disabled(store.selection.selectedIDs.isEmpty)
+            if store.deletionMode == .removePermanently {
+                Button("Delete Permanently…", role: .destructive, action: store.requestConfirmation)
+                    .tint(.red)
+                    .disabled(store.selection.selectedIDs.isEmpty)
+            } else {
+                Button("Move to Trash…", action: store.requestConfirmation)
+                    .disabled(store.selection.selectedIDs.isEmpty)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -207,7 +218,12 @@ struct CandidateDetailView: View {
                         .font(.callout.monospaced())
                         .textSelection(.enabled)
                         .foregroundStyle(.secondary)
-                    Button("Reveal in Finder", systemImage: "folder") { store.reveal(candidate) }
+                    HStack {
+                        Button("Reveal in Finder", systemImage: "folder") { store.reveal(candidate) }
+                        Button("Never Clean This", systemImage: "hand.raised.slash") { store.exclude(candidate) }
+                            .disabled(store.isExcluded(candidate))
+                            .help("Add this path to the exclusion list. It stays blocked on every scan until removed in Settings.")
+                    }
                 }
                 if let reason = candidate.eligibility.blockedReason {
                     Label("Blocked: \(reason). This item cannot be selected.", systemImage: "lock.fill")

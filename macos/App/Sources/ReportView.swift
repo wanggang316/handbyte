@@ -22,6 +22,9 @@ struct ReportView: View {
                 Button("Rescan", systemImage: "arrow.clockwise", action: store.startScan)
                     .keyboardShortcut(.defaultAction)
             }
+            if store.scanLackedFullDiskAccess {
+                MissingAccessNote()
+            }
             HStack(spacing: 20) {
                 count("Moved to Trash", report.moved.count, .green)
                 count("Removed", report.removed.count, .red)

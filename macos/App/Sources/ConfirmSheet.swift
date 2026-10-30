@@ -2,11 +2,15 @@ import HandbyteCore
 import HandbyteUI
 import SwiftUI
 
-/// The complete list of what is about to move to the Trash. Return does not
-/// confirm: only Cancel has a keyboard shortcut.
+/// The complete list of what is about to be cleaned. Return never confirms:
+/// only Cancel has a keyboard shortcut. Permanent deletion shows a red,
+/// differently worded sheet and needs the acknowledgement box ticked.
 struct ConfirmSheet: View {
     @Environment(AppStore.self) private var store
     let candidates: [Candidate]
+    @State private var acknowledged = false
+
+    private var permanent: Bool { store.deletionMode == .removePermanently }
 
     private var totalBytes: Int64 {
         candidates.reduce(0) { $0 + $1.size.allocatedBytes }
@@ -14,9 +18,18 @@ struct ConfirmSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Move \(candidates.count) items to the Trash?")
-                .font(.title2.weight(.semibold))
-            Text("Each item is checked again right before it moves. Items that changed since the scan are skipped and reported. You can put items back from the Trash in Finder.")
+            HStack(spacing: 8) {
+                if permanent {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                }
+                Text(permanent ? "Permanently delete \(candidates.count) items?" : "Move \(candidates.count) items to the Trash?")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(permanent ? .red : .primary)
+            }
+            Text(permanent
+                ? "These items are deleted without a Trash copy. There is no undo and no Put Back. Each item is checked again right before it is removed; items that changed since the scan are skipped and reported."
+                : "Each item is checked again right before it moves. Items that changed since the scan are skipped and reported. You can put items back from the Trash in Finder.")
                 .foregroundStyle(.secondary)
             List(candidates) { candidate in
                 HStack {
@@ -32,22 +45,35 @@ struct ConfirmSheet: View {
                             .truncationMode(.middle)
                     }
                     Spacer()
-                    Text("Move to Trash")
+                    Text(permanent ? "Delete permanently" : "Move to Trash")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(permanent ? .red : .secondary)
                     Text(ByteFormat.string(candidate.size))
                         .monospacedDigit()
                         .frame(width: 90, alignment: .trailing)
                 }
             }
             .frame(minHeight: 240)
+            if permanent {
+                Toggle("I understand these items cannot be recovered", isOn: $acknowledged)
+                    .toggleStyle(.checkbox)
+            }
             HStack {
                 Text("Total: \(ByteFormat.string(totalBytes))")
                     .monospacedDigit()
                 Spacer()
                 Button("Cancel", action: store.dismissConfirmation)
                     .keyboardShortcut(.cancelAction)
-                Button("Move to Trash", action: store.confirmClean)
+                if permanent {
+                    Button("Delete Permanently", role: .destructive) {
+                        store.confirmClean(acknowledged: acknowledged)
+                    }
+                    .tint(.red)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!acknowledged)
+                } else {
+                    Button("Move to Trash") { store.confirmClean() }
+                }
             }
         }
         .padding(20)
