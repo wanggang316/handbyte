@@ -6,7 +6,7 @@ import HandbyteCore
 @Suite("Settings")
 struct SettingsTests {
     @Test func defaultsMatchTheScanConfigurationAndKeepTheTrash() {
-        let settings = Settings()
+        let settings = AppSettings()
         #expect(settings.deletionMode == .trash)
         #expect(settings.projectRoots == Catalog.defaultProjectRoots)
         #expect(settings.exclusions.isEmpty)
@@ -14,7 +14,7 @@ struct SettingsTests {
     }
 
     @Test func fileRoundTripsEveryField() throws {
-        var settings = Settings()
+        var settings = AppSettings()
         settings.deletionMode = .removePermanently
         settings.projectRoots = ["~/src", "/Volumes/Work"]
         settings.exclusions = ["xcode-archives", "/Users/alice/Library/Caches/keep"]
@@ -25,7 +25,7 @@ struct SettingsTests {
     }
 
     @Test func fileCarriesTheFormatVersion() throws {
-        let data = try SettingsFile.encode(Settings())
+        let data = try SettingsFile.encode(AppSettings())
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(object["version"] as? Int == SettingsFile.currentVersion)
         #expect(object["settings"] is [String: Any])

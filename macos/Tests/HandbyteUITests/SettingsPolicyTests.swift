@@ -8,7 +8,7 @@ struct SettingsPolicyTests {
     let home = URL(filePath: "/Users/alice", directoryHint: .isDirectory)
 
     @Test func scanConfigurationTakesRootsAndMinimumSize() {
-        var settings = Settings()
+        var settings = AppSettings()
         settings.projectRoots = ["~/src"]
         settings.minimumSize = 1024
 
@@ -21,7 +21,7 @@ struct SettingsPolicyTests {
     }
 
     @Test func policyContextExpandsRootsAndCarriesExclusions() {
-        var settings = Settings()
+        var settings = AppSettings()
         settings.projectRoots = ["~/src", "/Volumes/Work"]
         settings.exclusions = ["xcode-archives", "/Users/alice/Library/Caches/keep"]
 
@@ -34,7 +34,7 @@ struct SettingsPolicyTests {
 
     @Test func excludingACandidateRecordsItsPathOnce() {
         let candidate = Fixtures.candidate(path: "/Users/alice/Library/Caches/com.example.app/")
-        var settings = Settings()
+        var settings = AppSettings()
 
         settings.exclude(candidate)
         settings.exclude(candidate)
@@ -44,7 +44,7 @@ struct SettingsPolicyTests {
     }
 
     @Test func addingAnEntryTrimsAndIgnoresBlanksAndDuplicates() {
-        var settings = Settings()
+        var settings = AppSettings()
         settings.addExclusion("  xcode-archives ")
         settings.addExclusion("xcode-archives")
         settings.addExclusion("   ")
@@ -64,7 +64,7 @@ struct SettingsPolicyTests {
 
         let rule = Fixtures.rule()
         let first = try #require(Fixtures.candidate(onDisk: directory, rule: rule))
-        var settings = Settings()
+        var settings = AppSettings()
         settings.exclude(first)
 
         // A rescan after the directory was replaced: new inode, same path.
@@ -79,7 +79,7 @@ struct SettingsPolicyTests {
     }
 
     @Test func ruleIDExclusionBlocksEveryCandidateOfTheRule() {
-        var settings = Settings()
+        var settings = AppSettings()
         settings.addExclusion("xcode-archives")
         let archives = Fixtures.candidate(
             path: "/Users/alice/Library/Developer/Xcode/Archives", rule: Fixtures.rule(id: "xcode-archives", category: .xcode)
@@ -93,13 +93,13 @@ struct SettingsPolicyTests {
 @Suite("Clean confirmation")
 struct CleanConfirmationTests {
     @Test func trashNeedsNoAcknowledgement() {
-        #expect(!Settings.DeletionMode.trash.requiresAcknowledgement)
+        #expect(!AppSettings.DeletionMode.trash.requiresAcknowledgement)
         #expect(CleanConfirmation.action(for: .trash, acknowledged: false) == .trash)
         #expect(CleanConfirmation.action(for: .trash, acknowledged: true) == .trash)
     }
 
     @Test func permanentDeletionIsUnreachableWithoutAcknowledgement() {
-        #expect(Settings.DeletionMode.removePermanently.requiresAcknowledgement)
+        #expect(AppSettings.DeletionMode.removePermanently.requiresAcknowledgement)
         #expect(CleanConfirmation.action(for: .removePermanently, acknowledged: false) == nil)
         #expect(CleanConfirmation.action(for: .removePermanently, acknowledged: true) == .removePermanently)
     }

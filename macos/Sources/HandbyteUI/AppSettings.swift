@@ -3,7 +3,7 @@ import HandbyteCore
 
 /// The user's persistent choices. Defaults equal a `ScanConfiguration` with
 /// Trash deletion, so a fresh install behaves like the Go CLI.
-public struct Settings: Sendable, Hashable, Codable {
+public struct AppSettings: Sendable, Hashable, Codable {
     public enum DeletionMode: String, Sendable, Hashable, Codable, CaseIterable {
         case trash
         case removePermanently
@@ -25,7 +25,7 @@ public struct Settings: Sendable, Hashable, Codable {
     /// A field missing from an older or hand-edited file keeps its default.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let defaults = Settings()
+        let defaults = AppSettings()
         deletionMode = try container.decodeIfPresent(DeletionMode.self, forKey: .deletionMode) ?? defaults.deletionMode
         projectRoots = try container.decodeIfPresent([String].self, forKey: .projectRoots) ?? defaults.projectRoots
         exclusions = try container.decodeIfPresent([String].self, forKey: .exclusions) ?? defaults.exclusions
@@ -49,20 +49,20 @@ public enum SettingsFile {
 
     private struct Envelope: Codable {
         var version: Int
-        var settings: Settings
+        var settings: AppSettings
     }
 
     private struct VersionOnly: Decodable {
         var version: Int
     }
 
-    public static func encode(_ settings: Settings) throws -> Data {
+    public static func encode(_ settings: AppSettings) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(Envelope(version: currentVersion, settings: settings))
     }
 
-    public static func decode(_ data: Data) throws -> Settings {
+    public static func decode(_ data: Data) throws -> AppSettings {
         let decoder = JSONDecoder()
         let version = try decoder.decode(VersionOnly.self, from: data).version
         guard version == currentVersion else {
@@ -88,14 +88,14 @@ public struct SettingsStore: Sendable {
 
     /// Defaults when no file exists; throws when the file cannot be decoded,
     /// so the caller decides whether to fall back or warn.
-    public func load() throws -> Settings {
+    public func load() throws -> AppSettings {
         guard FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) else {
-            return Settings()
+            return AppSettings()
         }
         return try SettingsFile.decode(try Data(contentsOf: fileURL))
     }
 
-    public func save(_ settings: Settings) throws {
+    public func save(_ settings: AppSettings) throws {
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try SettingsFile.encode(settings).write(to: fileURL, options: .atomic)
     }
@@ -103,7 +103,7 @@ public struct SettingsStore: Sendable {
 
 // MARK: Scan and policy inputs
 
-extension Settings {
+extension AppSettings {
     /// The configuration for one scan. Launch overrides are applied by the
     /// caller afterwards so they win over the file.
     public func scanConfiguration(home: URL) -> ScanConfiguration {
@@ -125,7 +125,7 @@ extension Settings {
 
 // MARK: Exclusions
 
-extension Settings {
+extension AppSettings {
     /// "Never clean this" records the candidate's path, not its rule id or
     /// candidate id: a rule id would also hide every sibling of a child-expanded
     /// preset, and the candidate id changes when the directory is recreated.
@@ -166,7 +166,7 @@ extension Settings {
 
 // MARK: Deletion mode
 
-extension Settings.DeletionMode {
+extension AppSettings.DeletionMode {
     public var cleanAction: CleanAction {
         switch self {
         case .trash: .trash
@@ -185,7 +185,7 @@ extension Settings.DeletionMode {
 /// `removePermanently` is produced only when the user acknowledged the
 /// distinct confirmation; otherwise the request is refused with `nil`.
 public enum CleanConfirmation {
-    public static func action(for mode: Settings.DeletionMode, acknowledged: Bool) -> CleanAction? {
+    public static func action(for mode: AppSettings.DeletionMode, acknowledged: Bool) -> CleanAction? {
         if mode.requiresAcknowledgement, !acknowledged {
             return nil
         }

@@ -22,14 +22,14 @@ struct SettingsStoreTests {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }
         let store = SettingsStore(fileURL: SettingsStore.defaultURL(home: home))
-        #expect(try store.load() == Settings())
+        #expect(try store.load() == AppSettings())
     }
 
     @Test func saveCreatesTheDirectoryAndLoadReadsItBack() throws {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }
         let store = SettingsStore(fileURL: SettingsStore.defaultURL(home: home))
-        var settings = Settings()
+        var settings = AppSettings()
         settings.exclusions = ["/Users/alice/Library/Caches/keep"]
         settings.minimumSize = 4096
 
