@@ -100,8 +100,10 @@ final class AppStore {
         }
     }
 
+    /// Built from `configuration`, not the settings alone, so overridden
+    /// project roots are protected roots as well.
     private var policy: EligibilityPolicy {
-        EligibilityPolicy(context: settings.policyContext(home: home, runningApps: WorkspaceRunningAppsProbe()))
+        EligibilityPolicy(context: settings.policyContext(for: configuration, runningApps: WorkspaceRunningAppsProbe()))
     }
 
     private func persistSettings() {

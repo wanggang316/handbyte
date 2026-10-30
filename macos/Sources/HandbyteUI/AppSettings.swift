@@ -114,9 +114,16 @@ extension AppSettings {
     }
 
     public func policyContext(home: URL, runningApps: any RunningAppsProbe) -> PolicyContext {
+        policyContext(for: scanConfiguration(home: home), runningApps: runningApps)
+    }
+
+    /// The policy for the roots that `configuration` scans, which may differ
+    /// from `projectRoots` when launch overrides were applied. The configured
+    /// roots are protected locations, so both must agree.
+    public func policyContext(for configuration: ScanConfiguration, runningApps: any RunningAppsProbe) -> PolicyContext {
         PolicyContext(
-            home: home,
-            projectRoots: projectRoots.map { PathTemplate.expand($0, home: home) },
+            home: configuration.home,
+            projectRoots: configuration.projectRoots.map { PathTemplate.expand($0, home: configuration.home) },
             exclusions: Set(exclusions),
             runningApps: runningApps
         )

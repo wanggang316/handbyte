@@ -32,6 +32,22 @@ struct SettingsPolicyTests {
         #expect(context.exclusions == ["xcode-archives", "/Users/alice/Library/Caches/keep"])
     }
 
+    @Test func policyContextForAConfigurationProtectsItsRoots() {
+        // Launch overrides replace the roots that are scanned; the same roots
+        // must be the protected ones.
+        var settings = AppSettings()
+        settings.projectRoots = ["~/src"]
+        settings.exclusions = ["xcode-archives"]
+        var configuration = settings.scanConfiguration(home: home)
+        configuration.projectRoots = ["/tmp/hb-fixture"]
+
+        let context = settings.policyContext(for: configuration, runningApps: StaticRunningAppsProbe())
+
+        #expect(context.home == home)
+        #expect(context.projectRoots.map(\.standardizedFileSystemPath) == ["/tmp/hb-fixture"])
+        #expect(context.exclusions == ["xcode-archives"])
+    }
+
     @Test func excludingACandidateRecordsItsPathOnce() {
         // Doubled and trailing slashes come from typed roots; the entry is stored clean.
         let candidate = Fixtures.candidate(path: "/Users/alice//Library/Caches/com.example.app/")
