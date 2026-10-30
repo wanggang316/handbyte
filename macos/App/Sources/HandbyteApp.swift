@@ -4,19 +4,32 @@ import SwiftUI
 
 @main
 struct HandbyteApp: App {
-    // Not started yet: Sparkle refuses to start without SUPublicEDKey.
-    // Ticket #9 adds the key and starts the updater.
+    // Debug builds are ad-hoc signed and never match the appcast, so the
+    // updater only starts in Release builds.
     private let updaterController = SPUStandardUpdaterController(
-        startingUpdater: false,
+        startingUpdater: Self.startsUpdater,
         updaterDelegate: nil,
         userDriverDelegate: nil
     )
     @State private var store = AppStore()
 
+    private static var startsUpdater: Bool {
+        #if DEBUG
+        return false
+        #else
+        return true
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(store)
+        }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updater: updaterController.updater)
+            }
         }
     }
 }

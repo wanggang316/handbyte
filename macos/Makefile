@@ -1,4 +1,4 @@
-.PHONY: build test sync-check parity generate app clean
+.PHONY: build test test-scripts sync-check parity generate app release clean
 
 DERIVED_DATA ?= .dd
 # Debug build for local runs and CI: ad-hoc identity, universal binary.
@@ -11,6 +11,9 @@ build:
 
 test:
 	swift test
+
+test-scripts:
+	bash scripts/tests/release-lib.test.sh
 
 sync-check:
 	scripts/sync-check.sh
@@ -26,6 +29,11 @@ generate:
 app: generate
 	xcodebuild -scheme Handbyte -configuration Debug -destination 'platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) build $(XCODEBUILD_FLAGS)
+
+# Signed Release archive, DMG and Sparkle appcast under dist/.
+# Pass VERSION=X.Y.Z to override MARKETING_VERSION from project.yml.
+release:
+	DERIVED_DATA=$(DERIVED_DATA) scripts/release.sh $(if $(VERSION),--version $(VERSION))
 
 clean:
 	rm -rf .build $(DERIVED_DATA) Handbyte.xcodeproj App/Info.plist App/Handbyte.entitlements dist
