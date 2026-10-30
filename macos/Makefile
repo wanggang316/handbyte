@@ -1,4 +1,4 @@
-.PHONY: build test test-scripts generate app release clean
+.PHONY: build test test-scripts sync-check parity generate app release clean
 
 DERIVED_DATA ?= .dd
 # Debug build for local runs and CI: ad-hoc identity, universal binary.
@@ -14,6 +14,14 @@ test:
 
 test-scripts:
 	bash scripts/tests/release-lib.test.sh
+
+sync-check:
+	scripts/sync-check.sh
+
+# Manual: compare hbscan with the Go CLI on this machine. PARITY_ARGS passes
+# flags such as --min 100M --no-projects to both scanners.
+parity:
+	scripts/parity.sh $(PARITY_ARGS)
 
 generate:
 	xcodegen generate

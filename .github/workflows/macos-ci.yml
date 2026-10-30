@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'macos/**'
+      - 'internal/scanner/presets.go'
       - '.github/workflows/macos-ci.yml'
   pull_request:
     paths:
       - 'macos/**'
+      - 'internal/scanner/presets.go'
       - '.github/workflows/macos-ci.yml'
 
 concurrency:
@@ -21,6 +23,9 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check rule ids against the Go CLI
+        run: make -C macos sync-check
 
       - name: Select Xcode
         run: |
