@@ -75,6 +75,13 @@ jobs:
       - name: Install tools
         run: brew install xcodegen create-dmg
 
+      # The same gates as macos-ci, before any secret is touched.
+      - name: Check rule ids and run tests
+        run: |
+          make -C macos sync-check
+          make -C macos test
+          make -C macos test-scripts
+
       - name: Import Developer ID certificate
         env:
           DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
@@ -107,16 +114,23 @@ jobs:
           VERSION="${GITHUB_REF_NAME#app/v}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           make -C macos release VERSION="$VERSION"
-          rm -f "$NOTARY_API_KEY_PATH"
 
+      # Re-entrant: a rerun after a later step failed finds the release in
+      # place and replaces its asset instead of failing.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "Handbyte $VERSION" \
-            --generate-notes \
-            "macos/dist/Handbyte-$VERSION.dmg"
+          set -euo pipefail
+          DMG="macos/dist/Handbyte-$VERSION.dmg"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$DMG" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "Handbyte $VERSION" \
+              --generate-notes \
+              "$DMG"
+          fi
 
       # The appcast points at the release asset uploaded above, so this runs last.
       # docs/appcast.xml also switches the landing page download button on.
@@ -133,6 +147,10 @@ jobs:
           git add docs/appcast.xml docs/releases
           git commit -m "Publish appcast for Handbyte $VERSION"
           git push origin main
+
+      - name: Remove notarization key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
 
       - name: Remove temporary keychain
         if: always()

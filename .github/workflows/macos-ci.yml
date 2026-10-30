@@ -27,6 +27,9 @@ jobs:
       - name: Check rule ids against the Go CLI
         run: make -C macos sync-check
 
+      - name: Test release scripts
+        run: make -C macos test-scripts
+
       - name: Select Xcode
         run: |
           sudo xcode-select -s /Applications/Xcode_26.3.app
