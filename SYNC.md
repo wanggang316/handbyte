@@ -75,3 +75,5 @@ Scan-wide differences that belong to no single rule:
 | Behaviour | CLI | App | Note |
 |---|---|---|---|
 | Hard links | Intentional difference | Implemented | The CLI counts every hard link to a file, so a file with two links is counted twice. The app counts an inode once per scan, so the sum over all candidates equals the bytes a cleanup can free. `macos/scripts/parity.sh` reports both effects as expected size differences. |
+| Operations journal | Intentional difference | Intentional difference | The CLI appends JSON Lines to `actions.jsonl` and reads it back for `restore`. The app appends tab-separated lines to `~/Library/Logs/handbyte/operations.log` as an audit trail only. Neither side reads the other file. |
+| Settings file | Intentional difference | Intentional difference | The CLI stores roots and exclusions in its own `config.json`. The app stores deletion mode, minimum size, roots and exclusions in `~/Library/Application Support/Handbyte/settings.json`. Neither side reads the other file. |

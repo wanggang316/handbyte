@@ -17,7 +17,8 @@
 // Inside path and detail a tab, newline, carriage return or backslash is
 // written as \t, \n, \r or \\ so a line stays one line and splits on tabs.
 // Preview and policy refusals change nothing and are not journaled. File
-// contents are never logged. The Go CLI is expected to adopt the same file.
+// contents are never logged. The Go CLI keeps its own JSON Lines journal
+// (`actions.jsonl`); the two files are not shared.
 
 import Foundation
 
