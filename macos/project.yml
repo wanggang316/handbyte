@@ -18,7 +18,8 @@ packages:
     path: .
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    majorVersion: 2.0.0
+    # Pinned so Release builds are reproducible; upgrade Sparkle in its own commit.
+    exactVersion: 2.10.1
 targets:
   Handbyte:
     type: application
