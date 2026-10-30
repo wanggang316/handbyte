@@ -44,16 +44,40 @@ struct SettingsPolicyTests {
         #expect(settings.excludes(candidate))
     }
 
-    @Test func addingAnEntryTrimsAndIgnoresBlanksAndDuplicates() {
+    @Test func addingAnEntryTrimsAndIgnoresDuplicates() throws {
         var settings = AppSettings()
-        settings.addExclusion("  xcode-archives ")
-        settings.addExclusion("xcode-archives")
-        settings.addExclusion("   ")
-        settings.addExclusion("/Users/alice/Library/Caches/keep/")
+        try settings.addExclusion("  xcode-archives ", home: home)
+        try settings.addExclusion("xcode-archives", home: home)
+        try settings.addExclusion("/Users/alice/Library/Caches/keep/", home: home)
         #expect(settings.exclusions == ["xcode-archives", "/Users/alice/Library/Caches/keep"])
 
         settings.removeExclusion("xcode-archives")
         #expect(settings.exclusions == ["/Users/alice/Library/Caches/keep"])
+    }
+
+    @Test func homeRelativeEntryIsExpandedWhenAdded() throws {
+        // The policy compares absolute paths, so a `~/` entry is stored expanded.
+        var settings = AppSettings()
+        try settings.addExclusion("~/Library/Caches/keep/", home: home)
+        #expect(settings.exclusions == ["/Users/alice/Library/Caches/keep"])
+
+        let candidate = Fixtures.candidate(path: "/Users/alice/Library/Caches/keep")
+        #expect(settings.excludes(candidate))
+    }
+
+    @Test func entryThatIsNeitherARuleIDNorAPathIsRefused() {
+        var settings = AppSettings()
+        #expect(throws: AppSettings.EntryError.unknownExclusion("keep")) {
+            try settings.addExclusion("keep", home: home)
+        }
+        #expect(throws: AppSettings.EntryError.unknownExclusion("")) {
+            try settings.addExclusion("   ", home: home)
+        }
+        #expect(throws: AppSettings.EntryError.unknownExclusion("xcode-archives@1:2")) {
+            try settings.addExclusion("xcode-archives@1:2", home: home)
+        }
+        #expect(settings.exclusions.isEmpty)
+        #expect(!AppSettings.EntryError.unknownExclusion("keep").message.isEmpty)
     }
 
     @Test func excludedPathStaysBlockedWhenTheDirectoryIsRecreated() throws {
@@ -79,9 +103,9 @@ struct SettingsPolicyTests {
         #expect(policy.evaluate(first) == .blocked(reason: "Excluded by user"))
     }
 
-    @Test func ruleIDExclusionBlocksEveryCandidateOfTheRule() {
+    @Test func ruleIDExclusionBlocksEveryCandidateOfTheRule() throws {
         var settings = AppSettings()
-        settings.addExclusion("xcode-archives")
+        try settings.addExclusion("xcode-archives", home: home)
         let archives = Fixtures.candidate(
             path: "/Users/alice/Library/Developer/Xcode/Archives", rule: Fixtures.rule(id: "xcode-archives", category: .xcode)
         )

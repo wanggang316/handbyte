@@ -126,41 +126,62 @@ extension AppSettings {
 // MARK: Exclusions
 
 extension AppSettings {
+    /// Why a typed entry was refused. The settings window shows `message`.
+    public enum EntryError: Error, Hashable {
+        /// Neither a path (`/…`, `~/…`) nor a catalog rule id.
+        case unknownExclusion(String)
+
+        public var message: String {
+            switch self {
+            case .unknownExclusion(let entry):
+                "\"\(entry)\" is not a rule id or a path. Use a rule id such as xcode-archives, or a path starting with / or ~/."
+            }
+        }
+    }
+
     /// "Never clean this" records the candidate's path, not its rule id or
     /// candidate id: a rule id would also hide every sibling of a child-expanded
     /// preset, and the candidate id changes when the directory is recreated.
     /// The path is what the user saw and keeps matching across rescans.
     public static func exclusionEntry(for candidate: Candidate) -> String {
-        normalizedEntry(candidate.url.standardizedFileSystemPath)
+        candidate.url.standardizedFileSystemPath
     }
 
     public mutating func exclude(_ candidate: Candidate) {
-        addExclusion(Self.exclusionEntry(for: candidate))
+        append(exclusion: Self.exclusionEntry(for: candidate))
     }
 
     public func excludes(_ candidate: Candidate) -> Bool {
         exclusions.contains(Self.exclusionEntry(for: candidate)) || exclusions.contains(candidate.rule.id)
     }
 
-    /// Adds a rule id or an absolute path. Blank and duplicate entries are ignored.
-    public mutating func addExclusion(_ entry: String) {
-        let entry = Self.normalizedEntry(entry)
-        guard !entry.isEmpty, !exclusions.contains(entry) else { return }
-        exclusions.append(entry)
+    /// Adds a typed entry: a catalog rule id, an absolute path, or a `~/` path,
+    /// which is expanded against `home` because the policy compares absolute
+    /// paths. Duplicates are ignored; anything else is refused.
+    public mutating func addExclusion(_ text: String, home: URL) throws {
+        let entry = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if Self.isPath(entry) {
+            append(exclusion: PathTemplate.expand(entry, home: home).standardizedFileSystemPath)
+        } else if Self.ruleIDs.contains(entry) {
+            append(exclusion: entry)
+        } else {
+            throw EntryError.unknownExclusion(entry)
+        }
     }
 
     public mutating func removeExclusion(_ entry: String) {
         exclusions.removeAll { $0 == entry }
     }
 
-    /// Trims whitespace and, for a path, the trailing slash, so one directory
-    /// has one spelling in the list.
-    private static func normalizedEntry(_ text: String) -> String {
-        var entry = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        while entry.count > 1, entry.hasSuffix("/") {
-            entry.removeLast()
-        }
-        return entry
+    static func isPath(_ entry: String) -> Bool {
+        entry.hasPrefix("/") || entry.hasPrefix("~/")
+    }
+
+    private static let ruleIDs = Set(Catalog.rules.map(\.id))
+
+    private mutating func append(exclusion entry: String) {
+        guard !exclusions.contains(entry) else { return }
+        exclusions.append(entry)
     }
 }
 

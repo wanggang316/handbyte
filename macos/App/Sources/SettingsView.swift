@@ -185,6 +185,7 @@ private struct ProjectRootsSection: View {
 private struct ExclusionsSection: View {
     @Environment(AppStore.self) private var store
     @State private var newEntry = ""
+    @State private var refusal: String?
 
     var body: some View {
         Section {
@@ -208,22 +209,34 @@ private struct ExclusionsSection: View {
                 }
             }
             HStack {
-                TextField("Add an exclusion", text: $newEntry, prompt: Text("xcode-archives or /Users/you/path"))
+                TextField("Add an exclusion", text: $newEntry, prompt: Text("xcode-archives or ~/path"))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(add)
+                    .onChange(of: newEntry) { _, _ in refusal = nil }
                 Button("Add", action: add)
                     .disabled(newEntry.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let refusal {
+                Text(refusal)
+                    .font(.callout)
+                    .foregroundStyle(.red)
             }
         } header: {
             Text("Never clean")
         } footer: {
-            Text("A rule id excludes every item the rule finds; an absolute path excludes that directory. Excluded items stay in the list as blocked.")
+            Text("A rule id excludes every item the rule finds; a path (absolute or starting with ~/) excludes that directory. Excluded items stay in the list as blocked.")
         }
     }
 
     private func add() {
-        store.settings.addExclusion(newEntry)
-        newEntry = ""
+        do {
+            try store.settings.addExclusion(newEntry, home: store.home)
+            newEntry = ""
+        } catch let error as AppSettings.EntryError {
+            refusal = error.message
+        } catch {
+            refusal = error.localizedDescription
+        }
     }
 }
 
