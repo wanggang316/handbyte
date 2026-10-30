@@ -71,3 +71,32 @@ public enum SettingsFile {
         return try decoder.decode(Envelope.self, from: data).settings
     }
 }
+
+/// Reads and writes the settings file. Writes are atomic so a crash mid-save
+/// leaves the previous file intact.
+public struct SettingsStore: Sendable {
+    public let fileURL: URL
+
+    public init(fileURL: URL) {
+        self.fileURL = fileURL
+    }
+
+    /// `~/Library/Application Support/Handbyte/settings.json` for the given home.
+    public static func defaultURL(home: URL) -> URL {
+        home.appending(path: "Library/Application Support/Handbyte/settings.json")
+    }
+
+    /// Defaults when no file exists; throws when the file cannot be decoded,
+    /// so the caller decides whether to fall back or warn.
+    public func load() throws -> Settings {
+        guard FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) else {
+            return Settings()
+        }
+        return try SettingsFile.decode(try Data(contentsOf: fileURL))
+    }
+
+    public func save(_ settings: Settings) throws {
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try SettingsFile.encode(settings).write(to: fileURL, options: .atomic)
+    }
+}
