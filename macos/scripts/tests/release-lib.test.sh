@@ -85,6 +85,18 @@ case "$EMPTY" in
   *) echo "FAIL empty input yields a placeholder paragraph"; FAILED=1 ;;
 esac
 
+# --- release.sh argument parsing -------------------------------------------
+# Parsing happens before release.sh touches the file system, so this is safe.
+set +e
+bash "$HERE/../release.sh" --version >"$TMP/usage.out" 2>&1
+STATUS=$?
+set -e
+assert_eq "release.sh --version without a value exits 2" "2" "$STATUS"
+case "$(cat "$TMP/usage.out")" in
+  *"Usage: release.sh"*) echo "ok   release.sh --version without a value prints usage" ;;
+  *) echo "FAIL release.sh --version without a value prints usage"; cat "$TMP/usage.out"; FAILED=1 ;;
+esac
+
 if [[ $FAILED -ne 0 ]]; then
   echo "release-lib tests FAILED"
   exit 1

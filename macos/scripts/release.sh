@@ -33,12 +33,18 @@ REPO_DIR="$(cd "$MACOS_DIR/.." && pwd)"
 # shellcheck source=release-lib.sh
 source "$MACOS_DIR/scripts/release-lib.sh"
 
+usage_error() {
+  echo "release.sh: $1" >&2
+  sed -n '5,9p' "$0" >&2
+  exit 2
+}
+
 VERSION=""
 NOTES_FILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --version) VERSION=$2; shift 2 ;;
-    --notes) NOTES_FILE=$2; shift 2 ;;
+    --version) [[ $# -ge 2 ]] || usage_error "--version needs a value"; VERSION=$2; shift 2 ;;
+    --notes) [[ $# -ge 2 ]] || usage_error "--notes needs a file"; NOTES_FILE=$2; shift 2 ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "release.sh: unknown argument '$1'" >&2; exit 2 ;;
   esac
