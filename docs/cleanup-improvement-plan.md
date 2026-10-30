@@ -1,6 +1,8 @@
 # Cleanup improvement plan
 
-Status: proposal for review; no product changes implemented.
+Status: first-release scope (PRs 1-4) approved on 2026-10-29. This document
+preserves the research and design basis. See README.md for implemented behavior
+and operating limits. PRs 5-6 remain future work.
 Research date: 2026-10-28.
 Baseline: handbyte `e91b666`; Mole CLI `V1.65.0` (`308bf9911179ddfa40e5df9fdc42095a18ba5cfc`).
 
@@ -265,5 +267,5 @@ exact previews; unsupported actions must remain inspection-only.
 
 The alternative is to add more preset paths immediately. That increases apparent
 coverage but preserves the current uncertainty and deletion granularity. It is
-not recommended. Approval of this proposal should precede the behavior and data
-model changes; the research itself does not authorize their implementation.
+not recommended. The first-release behavior and data model changes were approved on 2026-10-29.
+The later rule families remain outside that release scope.

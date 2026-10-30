@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,15 +16,20 @@ import (
 
 // Progress is emitted live during scanning.
 type Progress struct {
+	Run         uint64
 	CurrentPath string
 	BytesSeen   int64
 	FilesSeen   int64
 	ItemsFound  int
 	Done        bool
+	Items       []Item
 }
 
 // Config controls a scan.
 type Config struct {
+	Scope         string
+	Exclusions    []string
+	ActivityProbe ActivityProbe
 	// ProjectRoots overrides DefaultProjectRoots if non-empty.
 	ProjectRoots []string
 	// MinSize: items smaller than this are dropped from the result.
@@ -57,53 +63,80 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 	// Build the task list: preset paths (possibly expanded), plus project
 	// artifact scans rooted at user dev directories.
 	type task struct {
-		path        string
-		category    Category
-		safety      Safety
-		description string
-		source      string
+		path                  string
+		category              Category
+		safety                Safety
+		description           string
+		source                string
+		project, scope, owner string
+		name                  string
 	}
 	var tasks []task
+	var unavailable []Item
+	report := func(path string, category Category, err error) {
+		if os.IsNotExist(err) {
+			return
+		}
+		unavailable = append(unavailable, Item{Path: path, Category: category, Safety: SafetyCaution, ScanStatus: "unavailable", ScanError: err.Error()})
+	}
 
-	for _, p := range Presets {
-		expanded, ok := expandHome(p.Path)
-		if !ok {
-			continue
-		}
-		info, err := os.Lstat(expanded)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		if p.ExpandChildren {
-			entries, err := os.ReadDir(expanded)
-			if err != nil {
+	if cfg.Scope != "projects" {
+		for _, p := range Presets {
+			expanded, ok := expandHome(p.Path)
+			if !ok {
 				continue
 			}
-			for _, e := range entries {
-				if !e.IsDir() {
+			info, err := os.Lstat(expanded)
+			if err != nil {
+				report(expanded, p.Category, err)
+				continue
+			}
+			if !info.IsDir() {
+				continue
+			}
+			if p.ExpandChildren {
+				entries, err := os.ReadDir(expanded)
+				if err != nil {
+					report(expanded, p.Category, err)
 					continue
 				}
+				for _, e := range entries {
+					if !e.IsDir() {
+						continue
+					}
+					tasks = append(tasks, task{
+						path:        filepath.Join(expanded, e.Name()),
+						category:    p.Category,
+						safety:      p.Safety,
+						description: p.Description,
+						source:      p.Source,
+					})
+				}
+			} else {
 				tasks = append(tasks, task{
-					path:        filepath.Join(expanded, e.Name()),
+					path:        expanded,
 					category:    p.Category,
 					safety:      p.Safety,
 					description: p.Description,
 					source:      p.Source,
 				})
 			}
-		} else {
-			tasks = append(tasks, task{
-				path:        expanded,
-				category:    p.Category,
-				safety:      p.Safety,
-				description: p.Description,
-				source:      p.Source,
-			})
 		}
-	}
 
+		simulatorItems, simulatorErr := discoverSimulators(ctx)
+		if simulatorErr != nil {
+			for _, it := range simulatorItems {
+				report(it.Path, CatXcode, simulatorErr)
+			}
+		} else {
+			for _, it := range simulatorItems {
+				tasks = append(tasks, task{path: it.Path, category: it.Category, safety: it.Safety, description: it.Description, source: it.Source, owner: it.Owner, name: it.Name})
+			}
+		}
+
+	}
 	// Project artifact roots: collected up-front so we can du them like presets.
-	if !cfg.SkipProjectScan {
+	if !cfg.SkipProjectScan && cfg.Scope != "quick" {
 		roots := cfg.ProjectRoots
 		if len(roots) == 0 {
 			roots = DefaultProjectRoots
@@ -112,11 +145,11 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		for _, p := range ProjectArtifactPatterns {
 			patternByName[p.Name] = p
 		}
-		matches := findArtifacts(ctx, roots, patternByName, progress)
+		matches := findArtifacts(ctx, roots, patternByName, progress, func(path string, err error) { report(path, CatProjectBuild, err) })
 		for _, m := range matches {
-			pat := patternByName[filepath.Base(m)]
+			pat := patternByName[filepath.Base(m.path)]
 			tasks = append(tasks, task{
-				path:        m,
+				path: m.path, project: m.project, scope: m.scope, owner: m.owner,
 				category:    pat.Category,
 				safety:      pat.Safety,
 				description: pat.Description,
@@ -125,10 +158,30 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		}
 	}
 
+	// Presets are ordered from specific rules to generic fallbacks.
+	seen := make(map[string]bool)
+	unique := tasks[:0]
+	for _, t := range tasks {
+		t.path = filepath.Clean(t.path)
+		if canonical, err := Physical(t.path); err == nil {
+			t.path = canonical
+		}
+		if seen[t.path] {
+			continue
+		}
+		seen[t.path] = true
+		unique = append(unique, t)
+	}
+	tasks = unique
+
+	if cfg.ActivityProbe == nil {
+		cfg.ActivityProbe = processProbe(ctx)
+	}
+
 	// Now du each task concurrently.
 	var (
 		mu       sync.Mutex
-		items    []Item
+		items    = unavailable
 		bytes    atomic.Int64
 		files    atomic.Int64
 		jobs     = make(chan task)
@@ -141,12 +194,16 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 			return
 		}
 		emitOnce.Lock()
+		mu.Lock()
+		snapshot := append([]Item(nil), items...)
+		mu.Unlock()
 		select {
 		case progress <- Progress{
 			CurrentPath: current,
 			BytesSeen:   bytes.Load(),
 			FilesSeen:   files.Load(),
-			ItemsFound:  len(items),
+			ItemsFound:  len(snapshot),
+			Items:       snapshot,
 		}:
 		default:
 		}
@@ -162,14 +219,28 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 					return
 				}
 				emit(t.path)
-				size, count, mt := du(ctx, t.path)
+				id, idErr := CaptureIdentity(t.path)
+				size, count, mt, scanErr := du(ctx, t.path)
+				if idErr != nil {
+					scanErr = idErr
+				}
 				bytes.Add(size)
 				files.Add(count)
-				if size < cfg.MinSize {
+				if size < cfg.MinSize && scanErr == nil {
 					continue
 				}
-				mu.Lock()
-				items = append(items, Item{
+				status := "complete"
+				reason := ""
+				if scanErr != nil {
+					status = "partial"
+					reason = scanErr.Error()
+				}
+				if ctx.Err() != nil {
+					status = "cancelled"
+				}
+				it := Item{
+					IsDir: true, Identity: id, Project: t.project, Scope: t.scope, Owner: t.owner, Name: t.name,
+					ScanStatus: status, ScanError: reason,
 					Path:        t.path,
 					Size:        size,
 					FileCount:   count,
@@ -178,16 +249,20 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 					Safety:      t.safety,
 					Description: t.description,
 					Source:      t.source,
-				})
+				}
+				assess(ctx, &it, cfg.Exclusions, cfg.ActivityProbe)
+				mu.Lock()
+				items = append(items, it)
 				mu.Unlock()
 				emit(t.path)
 			}
 		}()
 	}
+dispatch:
 	for _, t := range tasks {
 		select {
 		case <-ctx.Done():
-			break
+			break dispatch
 		case jobs <- t:
 		}
 	}
@@ -215,8 +290,9 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 
 // du recursively sums the size of path. Returns (bytes, files, mostRecentMtime).
 //
-// Errors are swallowed: a permission-denied subtree just contributes zero.
-func du(ctx context.Context, path string) (int64, int64, time.Time) {
+// Incomplete measurements retain their error instead of implying an empty subtree.
+func du(ctx context.Context, path string) (int64, int64, time.Time, error) {
+	var scanErr error
 	var (
 		total int64
 		count int64
@@ -224,41 +300,47 @@ func du(ctx context.Context, path string) (int64, int64, time.Time) {
 	)
 	_ = filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
+			scanErr = ctx.Err()
 			return filepath.SkipAll
 		}
 		if err != nil {
+			if scanErr == nil {
+				scanErr = fmt.Errorf("%s: %w", p, err)
+			}
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if d.IsDir() {
-			return nil
-		}
 		info, err := d.Info()
 		if err != nil {
+			if scanErr == nil {
+				scanErr = err
+			}
 			return nil
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return nil
 		}
-		total += diskBytes(info)
-		count++
 		if mt := info.ModTime(); mt.After(mod) {
 			mod = mt
 		}
+		if !d.IsDir() {
+			total += diskBytes(info)
+			count++
+		}
 		return nil
 	})
-	return total, count, mod
+	return total, count, mod, scanErr
 }
 
 // findArtifacts walks roots looking for directories whose basename matches
 // one of the configured project artifact patterns. When a match is found,
 // the walker does not descend into it (so we count node_modules without
 // walking into nested node_modules).
-func findArtifacts(ctx context.Context, roots []string, patterns map[string]ProjectArtifact, progress chan<- Progress) []string {
+func findArtifacts(ctx context.Context, roots []string, patterns map[string]ProjectArtifact, progress chan<- Progress, report func(string, error)) []projectTarget {
 	var (
-		found []string
+		found []projectTarget
 		mu    sync.Mutex
 	)
 	for _, root := range roots {
@@ -266,9 +348,12 @@ func findArtifacts(ctx context.Context, roots []string, patterns map[string]Proj
 		if !ok {
 			continue
 		}
-		if _, err := os.Stat(expanded); err != nil {
+		canonical, err := Physical(expanded)
+		if err != nil {
+			report(expanded, err)
 			continue
 		}
+		expanded = canonical
 		if progress != nil {
 			select {
 			case progress <- Progress{CurrentPath: "scanning " + expanded}:
@@ -280,6 +365,7 @@ func findArtifacts(ctx context.Context, roots []string, patterns map[string]Proj
 				return filepath.SkipAll
 			}
 			if err != nil {
+				report(p, err)
 				if d != nil && d.IsDir() {
 					return filepath.SkipDir
 				}
@@ -290,11 +376,16 @@ func findArtifacts(ctx context.Context, roots []string, patterns map[string]Proj
 			}
 			// Skip dot-dirs at root level except those we explicitly want.
 			base := d.Name()
-			if _, hit := patterns[base]; hit {
-				mu.Lock()
-				found = append(found, p)
-				mu.Unlock()
-				return filepath.SkipDir
+			if _, hit := patterns[base]; hit && p != expanded {
+				if candidate, ok := projectEvidence(p, expanded); ok {
+					mu.Lock()
+					found = append(found, candidate)
+					mu.Unlock()
+					return filepath.SkipDir
+				}
+				if base == "node_modules" {
+					return filepath.SkipDir
+				}
 			}
 			// Don't descend into VCS metadata.
 			if base == ".git" || base == ".svn" || base == ".hg" {
