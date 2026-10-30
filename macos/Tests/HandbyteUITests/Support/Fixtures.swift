@@ -44,3 +44,18 @@ enum Fixtures {
         )
     }
 }
+
+extension Fixtures {
+    /// A candidate whose identity is read from the disk, for policy tests.
+    static func candidate(onDisk url: URL, rule: Rule = rule()) -> Candidate? {
+        guard let status = FileStatus(lstatPath: url.path(percentEncoded: false)) else { return nil }
+        return Candidate(
+            rule: rule,
+            url: url,
+            identity: status.identity,
+            size: SizeReport(allocatedBytes: 4096, fileCount: 1, partial: false, errorCount: 0),
+            lastActivity: nil,
+            eligibility: .eligible
+        )
+    }
+}

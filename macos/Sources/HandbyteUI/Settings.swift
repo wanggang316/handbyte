@@ -100,3 +100,95 @@ public struct SettingsStore: Sendable {
         try SettingsFile.encode(settings).write(to: fileURL, options: .atomic)
     }
 }
+
+// MARK: Scan and policy inputs
+
+extension Settings {
+    /// The configuration for one scan. Launch overrides are applied by the
+    /// caller afterwards so they win over the file.
+    public func scanConfiguration(home: URL) -> ScanConfiguration {
+        var configuration = ScanConfiguration(home: home)
+        configuration.projectRoots = projectRoots
+        configuration.minimumSize = minimumSize
+        return configuration
+    }
+
+    public func policyContext(home: URL, runningApps: any RunningAppsProbe) -> PolicyContext {
+        PolicyContext(
+            home: home,
+            projectRoots: projectRoots.map { PathTemplate.expand($0, home: home) },
+            exclusions: Set(exclusions),
+            runningApps: runningApps
+        )
+    }
+}
+
+// MARK: Exclusions
+
+extension Settings {
+    /// "Never clean this" records the candidate's path, not its rule id or
+    /// candidate id: a rule id would also hide every sibling of a child-expanded
+    /// preset, and the candidate id changes when the directory is recreated.
+    /// The path is what the user saw and keeps matching across rescans.
+    public static func exclusionEntry(for candidate: Candidate) -> String {
+        normalizedEntry(candidate.url.path(percentEncoded: false))
+    }
+
+    public mutating func exclude(_ candidate: Candidate) {
+        addExclusion(Self.exclusionEntry(for: candidate))
+    }
+
+    public func excludes(_ candidate: Candidate) -> Bool {
+        exclusions.contains(Self.exclusionEntry(for: candidate)) || exclusions.contains(candidate.rule.id)
+    }
+
+    /// Adds a rule id or an absolute path. Blank and duplicate entries are ignored.
+    public mutating func addExclusion(_ entry: String) {
+        let entry = Self.normalizedEntry(entry)
+        guard !entry.isEmpty, !exclusions.contains(entry) else { return }
+        exclusions.append(entry)
+    }
+
+    public mutating func removeExclusion(_ entry: String) {
+        exclusions.removeAll { $0 == entry }
+    }
+
+    /// Trims whitespace and, for a path, the trailing slash, so one directory
+    /// has one spelling in the list.
+    private static func normalizedEntry(_ text: String) -> String {
+        var entry = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while entry.count > 1, entry.hasSuffix("/") {
+            entry.removeLast()
+        }
+        return entry
+    }
+}
+
+// MARK: Deletion mode
+
+extension Settings.DeletionMode {
+    public var cleanAction: CleanAction {
+        switch self {
+        case .trash: .trash
+        case .removePermanently: .removePermanently
+        }
+    }
+
+    /// Permanent deletion needs the user's explicit acknowledgement in the
+    /// confirmation sheet; the Trash does not.
+    public var requiresAcknowledgement: Bool {
+        self == .removePermanently
+    }
+}
+
+/// The single place that turns the deletion mode into a `CleanAction`.
+/// `removePermanently` is produced only when the user acknowledged the
+/// distinct confirmation; otherwise the request is refused with `nil`.
+public enum CleanConfirmation {
+    public static func action(for mode: Settings.DeletionMode, acknowledged: Bool) -> CleanAction? {
+        if mode.requiresAcknowledgement, !acknowledged {
+            return nil
+        }
+        return mode.cleanAction
+    }
+}
