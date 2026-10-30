@@ -193,9 +193,12 @@ if [[ -z "$SPARKLE_BIN" ]]; then
   echo "release.sh: Sparkle tools not found under $DERIVED_DATA/SourcePackages/artifacts" >&2
   exit 1
 fi
-if [[ ! -f "$UPDATES/appcast.xml" && -f "$PREVIOUS_APPCAST" ]]; then
+# Always start from the published feed so a rerun of the same version does
+# not keep the item generate_appcast wrote for the previous build.
+rm -f "$UPDATES/appcast.xml"
+if [[ -f "$PREVIOUS_APPCAST" ]]; then
   cp "$PREVIOUS_APPCAST" "$UPDATES/appcast.xml"
-  echo "Extending existing feed $PREVIOUS_APPCAST"
+  echo "Extending published feed $PREVIOUS_APPCAST"
 fi
 APPCAST_ARGS=(
   --download-url-prefix "$DOWNLOAD_URL_PREFIX"
