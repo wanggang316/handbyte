@@ -1,0 +1,83 @@
+name: Handbyte
+options:
+  bundleIdPrefix: com.gumpw
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ARCHS: arm64 x86_64
+    # Applies to the app target only. SPM package targets keep the Debug
+    # default, so `make app` also passes ONLY_ACTIVE_ARCH=NO on the command line.
+    ONLY_ACTIVE_ARCH: NO
+    SWIFT_STRICT_CONCURRENCY: complete
+packages:
+  HandbyteCore:
+    path: .
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    # Pinned so Release builds are reproducible; upgrade Sparkle in its own commit.
+    exactVersion: 2.10.1
+targets:
+  Handbyte:
+    type: application
+    platform: macOS
+    sources:
+      - path: App/Sources
+      - path: App/Resources
+    dependencies:
+      - package: HandbyteCore
+        product: HandbyteCore
+      - package: HandbyteCore
+        product: HandbyteUI
+      - package: Sparkle
+        product: Sparkle
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleName: Handbyte
+        CFBundleDisplayName: Handbyte
+        # Driven by MARKETING_VERSION / CURRENT_PROJECT_VERSION so release.sh
+        # can override both on the xcodebuild command line.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        LSApplicationCategoryType: public.app-category.utilities
+        NSHumanReadableCopyright: "Copyright 2026 Gump"
+        SUFeedURL: https://handbyte.gumpw.com/appcast.xml
+        # Public half of the EdDSA key in the maintainer's login keychain
+        # (`generate_keys -p`). The matching private key signs every update.
+        SUPublicEDKey: "bRg+MnS8YhPSuwCkPXyrJ7RvwtYGy2vH0HR+1h/IUXo="
+    entitlements:
+      path: App/Handbyte.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gumpw.handbyte
+        PRODUCT_NAME: Handbyte
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: NO
+        GENERATE_INFOPLIST_FILE: NO
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.1.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Developer ID Application"
+        DEVELOPMENT_TEAM: HC438T2B8P
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGN_STYLE: Automatic
+schemes:
+  Handbyte:
+    build:
+      targets:
+        Handbyte: all
+    run:
+      config: Debug
+    archive:
+      config: Release

@@ -1,0 +1,166 @@
+import Foundation
+import Testing
+import HandbyteCore
+@testable import HandbyteUI
+
+@Suite("Settings feed the scan and the policy")
+struct SettingsPolicyTests {
+    let home = URL(filePath: "/Users/alice", directoryHint: .isDirectory)
+
+    @Test func scanConfigurationTakesRootsAndMinimumSize() {
+        var settings = AppSettings()
+        settings.projectRoots = ["~/src"]
+        settings.minimumSize = 1024
+
+        let configuration = settings.scanConfiguration(home: home)
+
+        #expect(configuration.home == home)
+        #expect(configuration.projectRoots == ["~/src"])
+        #expect(configuration.minimumSize == 1024)
+        #expect(configuration.rules == Catalog.rules)
+    }
+
+    @Test func policyContextExpandsRootsAndCarriesExclusions() {
+        var settings = AppSettings()
+        settings.projectRoots = ["~/src", "/Volumes/Work"]
+        settings.exclusions = ["xcode-archives", "/Users/alice/Library/Caches/keep"]
+
+        let context = settings.policyContext(home: home, runningApps: StaticRunningAppsProbe())
+
+        #expect(context.home == home)
+        #expect(context.projectRoots.map { $0.path(percentEncoded: false) } == ["/Users/alice/src/", "/Volumes/Work/"])
+        #expect(context.exclusions == ["xcode-archives", "/Users/alice/Library/Caches/keep"])
+    }
+
+    @Test func policyContextForAConfigurationProtectsItsRoots() {
+        // Launch overrides replace the roots that are scanned; the same roots
+        // must be the protected ones.
+        var settings = AppSettings()
+        settings.projectRoots = ["~/src"]
+        settings.exclusions = ["xcode-archives"]
+        var configuration = settings.scanConfiguration(home: home)
+        configuration.projectRoots = ["/tmp/hb-fixture"]
+
+        let context = settings.policyContext(for: configuration, runningApps: StaticRunningAppsProbe())
+
+        #expect(context.home == home)
+        #expect(context.projectRoots.map(\.standardizedFileSystemPath) == ["/tmp/hb-fixture"])
+        #expect(context.exclusions == ["xcode-archives"])
+    }
+
+    @Test func excludingACandidateRecordsItsPathOnce() {
+        // Doubled and trailing slashes come from typed roots; the entry is stored clean.
+        let candidate = Fixtures.candidate(path: "/Users/alice//Library/Caches/com.example.app/")
+        var settings = AppSettings()
+
+        settings.exclude(candidate)
+        settings.exclude(candidate)
+
+        #expect(settings.exclusions == ["/Users/alice/Library/Caches/com.example.app"])
+        #expect(settings.excludes(candidate))
+    }
+
+    @Test func addingAnEntryTrimsAndIgnoresDuplicates() throws {
+        var settings = AppSettings()
+        try settings.addExclusion("  xcode-archives ", home: home)
+        try settings.addExclusion("xcode-archives", home: home)
+        try settings.addExclusion("/Users/alice/Library/Caches/keep/", home: home)
+        #expect(settings.exclusions == ["xcode-archives", "/Users/alice/Library/Caches/keep"])
+
+        settings.removeExclusion("xcode-archives")
+        #expect(settings.exclusions == ["/Users/alice/Library/Caches/keep"])
+    }
+
+    @Test func homeRelativeEntryIsExpandedWhenAdded() throws {
+        // The policy compares absolute paths, so a `~/` entry is stored expanded.
+        var settings = AppSettings()
+        try settings.addExclusion("~/Library/Caches/keep/", home: home)
+        #expect(settings.exclusions == ["/Users/alice/Library/Caches/keep"])
+
+        let candidate = Fixtures.candidate(path: "/Users/alice/Library/Caches/keep")
+        #expect(settings.excludes(candidate))
+    }
+
+    @Test func entryThatIsNeitherARuleIDNorAPathIsRefused() {
+        var settings = AppSettings()
+        #expect(throws: AppSettings.EntryError.unknownExclusion("keep")) {
+            try settings.addExclusion("keep", home: home)
+        }
+        #expect(throws: AppSettings.EntryError.unknownExclusion("")) {
+            try settings.addExclusion("   ", home: home)
+        }
+        #expect(throws: AppSettings.EntryError.unknownExclusion("xcode-archives@1:2")) {
+            try settings.addExclusion("xcode-archives@1:2", home: home)
+        }
+        #expect(settings.exclusions.isEmpty)
+        #expect(!AppSettings.EntryError.unknownExclusion("keep").message.isEmpty)
+    }
+
+    @Test func projectRootsStartWithHomeOrSlash() throws {
+        var settings = AppSettings()
+        settings.projectRoots = []
+        try settings.addProjectRoot(" ~/src ")
+        try settings.addProjectRoot("~/src")
+        try settings.addProjectRoot("/Volumes/Work")
+        #expect(settings.projectRoots == ["~/src", "/Volumes/Work"])
+
+        // A relative root would resolve against the working directory.
+        #expect(throws: AppSettings.EntryError.relativeProjectRoot("src")) {
+            try settings.addProjectRoot("src")
+        }
+        #expect(throws: AppSettings.EntryError.relativeProjectRoot("~src")) {
+            try settings.addProjectRoot("~src")
+        }
+        #expect(settings.projectRoots == ["~/src", "/Volumes/Work"])
+        #expect(!AppSettings.EntryError.relativeProjectRoot("src").message.isEmpty)
+    }
+
+    @Test func excludedPathStaysBlockedWhenTheDirectoryIsRecreated() throws {
+        let fixtureHome = FileManager.default.temporaryDirectory
+            .appending(path: "hb-policy-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let directory = fixtureHome.appending(path: "Library/Caches/com.example.app", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fixtureHome) }
+
+        let rule = Fixtures.rule()
+        let first = try #require(Fixtures.candidate(onDisk: directory, rule: rule))
+        var settings = AppSettings()
+        settings.exclude(first)
+
+        // A rescan after the directory was replaced: new inode, same path.
+        try FileManager.default.removeItem(at: directory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let second = try #require(Fixtures.candidate(onDisk: directory, rule: rule))
+        #expect(second.identity != first.identity)
+
+        let policy = EligibilityPolicy(context: settings.policyContext(home: fixtureHome, runningApps: StaticRunningAppsProbe()))
+        #expect(policy.evaluate(second) == .blocked(reason: "Excluded by user"))
+        #expect(policy.evaluate(first) == .blocked(reason: "Excluded by user"))
+    }
+
+    @Test func ruleIDExclusionBlocksEveryCandidateOfTheRule() throws {
+        var settings = AppSettings()
+        try settings.addExclusion("xcode-archives", home: home)
+        let archives = Fixtures.candidate(
+            path: "/Users/alice/Library/Developer/Xcode/Archives", rule: Fixtures.rule(id: "xcode-archives", category: .xcode)
+        )
+        let policy = EligibilityPolicy(context: settings.policyContext(home: home, runningApps: StaticRunningAppsProbe()))
+        // Missing on disk; the exclusion check runs before any probe.
+        #expect(policy.evaluate(archives) == .blocked(reason: "Excluded by user"))
+    }
+}
+
+@Suite("Clean confirmation")
+struct CleanConfirmationTests {
+    @Test func trashNeedsNoAcknowledgement() {
+        #expect(!AppSettings.DeletionMode.trash.requiresAcknowledgement)
+        #expect(CleanConfirmation.action(for: .trash, acknowledged: false) == .trash)
+        #expect(CleanConfirmation.action(for: .trash, acknowledged: true) == .trash)
+    }
+
+    @Test func permanentDeletionIsUnreachableWithoutAcknowledgement() {
+        #expect(AppSettings.DeletionMode.removePermanently.requiresAcknowledgement)
+        #expect(CleanConfirmation.action(for: .removePermanently, acknowledged: false) == nil)
+        #expect(CleanConfirmation.action(for: .removePermanently, acknowledged: true) == .removePermanently)
+    }
+}

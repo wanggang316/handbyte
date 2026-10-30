@@ -1,0 +1,159 @@
+# Release the Handbyte macOS app on tags app/vX.Y.Z (the CLI uses v* in release.yml).
+#
+# Builds a Developer ID signed, notarized DMG with macos/scripts/release.sh,
+# publishes it to a GitHub Release named after the tag, then commits the
+# Sparkle appcast and release notes to main so GitHub Pages serves them.
+#
+# Repository secrets (Settings > Secrets and variables > Actions). None are
+# created by automation; a human sets each one:
+#
+#   DEVELOPER_ID_P12_BASE64   Keychain Access > export "Developer ID Application:
+#                             WANG GANG (HC438T2B8P)" with its private key as .p12,
+#                             then `base64 -i DeveloperID.p12 | pbcopy`.
+#   DEVELOPER_ID_P12_PASSWORD Password chosen in the .p12 export dialog.
+#   APPLE_API_KEY_BASE64      App Store Connect > Users and Access > Integrations >
+#                             Team Keys: create a key (role Developer), download the
+#                             .p8 once, then `base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy`.
+#   APPLE_API_KEY_ID          The 10-character Key ID shown next to that key.
+#   APPLE_API_ISSUER          The Issuer ID (UUID) at the top of the Team Keys page.
+#   SPARKLE_PRIVATE_KEY       On the machine that holds the Sparkle key, run
+#                             `<sparkle>/bin/generate_keys -x key.txt`, paste the
+#                             file content, then `rm -P key.txt`. Its public half is
+#                             SUPublicEDKey in macos/project.yml.
+#
+# GITHUB_TOKEN (automatic) creates the release and pushes to main.
+name: macos-release
+
+on:
+  push:
+    tags:
+      - 'app/v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: sign, notarize, publish
+    # Hosted runners have no Xcode 27; Xcode 26.x builds a tools-version 6.2 package.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # build number is the commit count; release notes need tags
+
+      - name: Check secrets
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          missing=0
+          for name in DEVELOPER_ID_P12_BASE64 DEVELOPER_ID_P12_PASSWORD APPLE_API_KEY_BASE64 \
+                      APPLE_API_KEY_ID APPLE_API_ISSUER SPARKLE_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::secret $name is not set (see the header of this workflow)"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app
+          xcodebuild -version
+
+      - name: Install tools
+        run: brew install xcodegen create-dmg
+
+      # The same gates as macos-ci, before any secret is touched.
+      - name: Check rule ids and run tests
+        run: |
+          make -C macos sync-check
+          make -C macos test
+          make -C macos test-scripts
+
+      - name: Import Developer ID certificate
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # The runner context is not available in job-level env, so the
+          # keychain path is exported here for the later steps.
+          KEYCHAIN_PATH="$RUNNER_TEMP/release.keychain-db"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "$DEVELOPER_ID_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/cert.p12" -P "$DEVELOPER_ID_P12_PASSWORD" -A \
+            -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Build, sign, notarize, package
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          NOTARY_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          NOTARY_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          export NOTARY_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          echo "$APPLE_API_KEY_BASE64" | base64 --decode > "$NOTARY_API_KEY_PATH"
+          VERSION="${GITHUB_REF_NAME#app/v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          make -C macos release VERSION="$VERSION"
+
+      # Re-entrant: a rerun after a later step failed finds the release in
+      # place and replaces its asset instead of failing.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          DMG="macos/dist/Handbyte-$VERSION.dmg"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$DMG" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "Handbyte $VERSION" \
+              --generate-notes \
+              "$DMG"
+          fi
+
+      # The appcast points at the release asset uploaded above, so this runs last.
+      # docs/appcast.xml also switches the landing page download button on.
+      - name: Publish appcast to main
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          mkdir -p docs/releases
+          cp macos/dist/appcast.xml docs/appcast.xml
+          cp macos/dist/release-notes/* docs/releases/
+          git add docs/appcast.xml docs/releases
+          git commit -m "Publish appcast for Handbyte $VERSION"
+          git push origin main
+
+      - name: Remove notarization key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
+
+      - name: Remove temporary keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" || true
