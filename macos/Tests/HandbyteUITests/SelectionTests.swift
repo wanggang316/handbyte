@@ -137,4 +137,22 @@ struct SelectionTests {
         selection.toggle(safe.id)
         #expect(selection.selectedCandidates == [safe, hold])
     }
+
+    @Test func relabellingKeepsSelectablePicksAndDropsNewlyBlockedOnes() {
+        var selection = Selection(candidates: [safe, review])
+        selection.selectAllSafe()
+        selection.toggle(review.id)
+
+        // "Never clean this" on `safe`: the policy ran again and blocked it.
+        let excluded = Fixtures.candidate(path: safe.url.path, eligibility: .blocked(reason: "Excluded by user"))
+        var relabelled = Selection(candidates: [excluded, review], keeping: selection)
+        #expect(excluded.id == safe.id)
+        #expect(relabelled.selectedCandidates == [review])
+
+        relabelled.selectAllSafe()
+        relabelled.toggleGroup(.systemCache)
+        relabelled.toggle(excluded.id)
+        #expect(!relabelled.isSelected(excluded.id))
+        #expect(!relabelled.hasBulkSelectable(.systemCache))
+    }
 }

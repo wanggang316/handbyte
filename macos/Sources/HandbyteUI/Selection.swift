@@ -28,6 +28,14 @@ public struct Selection: Sendable, Equatable {
         byID = Dictionary(candidates.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
+    /// The same list after the policy ran again, for example after "never
+    /// clean this". Picks survive while the candidate is still selectable;
+    /// a newly blocked candidate drops out.
+    public init(candidates: [Candidate], keeping previous: Selection) {
+        self.init(candidates: candidates)
+        selectedIDs = Set(candidates.filter { previous.isSelected($0.id) && canSelect($0) }.map(\.id))
+    }
+
     public func isSelected(_ id: Candidate.ID) -> Bool {
         selectedIDs.contains(id)
     }
