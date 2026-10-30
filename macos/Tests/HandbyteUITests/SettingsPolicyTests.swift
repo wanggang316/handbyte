@@ -33,7 +33,8 @@ struct SettingsPolicyTests {
     }
 
     @Test func excludingACandidateRecordsItsPathOnce() {
-        let candidate = Fixtures.candidate(path: "/Users/alice/Library/Caches/com.example.app/")
+        // Doubled and trailing slashes come from typed roots; the entry is stored clean.
+        let candidate = Fixtures.candidate(path: "/Users/alice//Library/Caches/com.example.app/")
         var settings = AppSettings()
 
         settings.exclude(candidate)

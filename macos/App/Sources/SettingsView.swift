@@ -27,7 +27,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 560)
-        .frame(minHeight: 560)
+        .frame(minHeight: 520)
     }
 }
 
@@ -41,6 +41,7 @@ private struct DeletionSection: View {
                 Text("Delete permanently").tag(AppSettings.DeletionMode.removePermanently)
             }
             .pickerStyle(.radioGroup)
+            .labelsHidden()
             if settings.deletionMode == .removePermanently {
                 Label("Items are removed without a Trash copy and cannot be put back. Each cleanup asks for a separate acknowledgement.",
                       systemImage: "exclamationmark.triangle.fill")
@@ -68,6 +69,7 @@ private struct MinimumSizeSection: View {
         Section {
             HStack {
                 TextField("Minimum size", text: $text, prompt: Text("50M"))
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 120)
                     .onSubmit(commit)

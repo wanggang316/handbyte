@@ -4,7 +4,10 @@ struct ContentView: View {
     @Environment(AppStore.self) private var store
 
     var body: some View {
-        Group {
+        // A plain stack, not a safe-area inset: the split view's sidebar would
+        // scroll under an inset and the banner would cover the first rows.
+        VStack(spacing: 0) {
+            FullDiskAccessBanner()
             switch store.phase {
             case .idle, .scanning:
                 ScanView()
@@ -16,7 +19,6 @@ struct ContentView: View {
                 ReportView(report: report)
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) { FullDiskAccessBanner() }
         .frame(minWidth: 900, minHeight: 560)
     }
 }
