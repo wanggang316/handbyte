@@ -5,7 +5,7 @@ import Foundation
 public struct PolicyContext: Sendable {
     public var home: URL
     public var projectRoots: [URL]
-    /// Candidate ids or absolute paths the user marked "never clean this".
+    /// Rule ids, candidate ids or absolute paths the user marked "never clean this".
     public var exclusions: Set<String>
     public var runningApps: any RunningAppsProbe
 
@@ -57,7 +57,7 @@ public struct EligibilityPolicy: Sendable {
 
     public func evaluate(_ candidate: Candidate) -> Eligibility {
         let path = Self.normalizedPath(candidate.url)
-        if exclusions.contains(candidate.id) || exclusions.contains(path) {
+        if exclusions.contains(candidate.rule.id) || exclusions.contains(candidate.id) || exclusions.contains(path) {
             return .blocked(reason: "Excluded by user")
         }
         if protectedRoots.contains(path) {

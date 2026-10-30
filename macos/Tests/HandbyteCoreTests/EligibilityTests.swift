@@ -24,6 +24,17 @@ struct EligibilityPolicyTests {
         #expect(fixture.policy(exclusions: ["other-id"]).evaluate(candidate) == .blocked(reason: "Missing"))
     }
 
+    @Test func exclusionByRuleIDBlocksEveryCandidateOfThatRule() throws {
+        let fixture = try CleaningFixture()
+        let rule = fixture.rule(id: "xcode-archives")
+        let first = try fixture.candidate(at: try fixture.makeDirectory("Library/Developer/Xcode/Archives"), rule: rule)
+        let other = try fixture.candidate(at: try fixture.makeDirectory("Library/Caches/com.example.app"))
+
+        let policy = fixture.policy(exclusions: ["xcode-archives"])
+        #expect(policy.evaluate(first) == .blocked(reason: "Excluded by user"))
+        #expect(policy.evaluate(other) == .eligible)
+    }
+
     @Test func protectedRootsAreBlockedWithoutProbing() throws {
         let fixture = try CleaningFixture()
         let projectRoot = fixture.home.appending(path: "dev", directoryHint: .isDirectory)
