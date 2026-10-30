@@ -41,7 +41,13 @@ struct CleanerTests {
         let lines = journalLines(journal)
         #expect(lines.count == 2)
         #expect(lines.allSatisfy { $0.contains("\ttrash\tmoved\tlibrary-caches\t") })
-        #expect(lines.first?.contains("\t1000\t\(a.url.standardizedFileURL.path(percentEncoded: false))\t") == true)
+        // Directory URLs carry a trailing slash; the journal writes paths without it.
+        let fields = lines.first?.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) ?? []
+        #expect(fields.count == 7)
+        #expect(fields[4] == "1000")
+        #expect(fields[5] == a.url.fileSystemPath)
+        #expect(fields[6].hasPrefix(realTrash.fileSystemPath), "\(fields[6])")
+        #expect(!fields[6].hasSuffix("/"))
     }
 
     @Test func previewChangesNothingAndClaimsZero() async throws {

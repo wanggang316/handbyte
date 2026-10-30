@@ -105,7 +105,7 @@ public struct Cleaner: Sendable {
 
     private static func entry(for outcome: CleanOutcome, action: CleanAction, at timestamp: Date) -> JournalEntry {
         let (result, detail): (JournalEntry.Outcome, String?) = switch outcome.status {
-        case .moved(let destination): (.moved, destination.standardizedFileURL.path(percentEncoded: false))
+        case .moved(let destination): (.moved, destination.fileSystemPath)
         case .removed: (.removed, nil)
         case .failed(let error): (.failed, error)
         case .previewed, .skipped, .notAttempted:
@@ -117,7 +117,7 @@ public struct Cleaner: Sendable {
             outcome: result,
             ruleID: outcome.candidate.rule.id,
             bytes: outcome.bytesClaimed,
-            path: outcome.candidate.url.standardizedFileURL.path(percentEncoded: false),
+            path: outcome.candidate.url.fileSystemPath,
             detail: detail
         )
     }

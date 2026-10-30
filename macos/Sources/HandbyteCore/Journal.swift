@@ -10,8 +10,9 @@
 // - outcome: moved | removed | failed
 // - rule id: the catalog identifier, e.g. xcode-derived, artifact:node_modules
 // - bytes: allocated bytes the scan measured; 0 for failed
-// - path: the candidate path
-// - detail: Trash destination for moved, error text for failed, else empty
+// - path: the candidate path, without a trailing slash
+// - detail: Trash destination (no trailing slash) for moved, error text for
+//   failed, else empty
 //
 // Inside path and detail a tab, newline, carriage return or backslash is
 // written as \t, \n, \r or \\ so a line stays one line and splits on tabs.
