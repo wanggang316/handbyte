@@ -34,9 +34,15 @@ final class AppStore {
     var selection = Selection(candidates: [])
 
     /// Saved on every change. A file that cannot be read starts from defaults
-    /// and `settingsError` tells the settings window why.
+    /// and `settingsError` tells the settings window why. A change to a policy
+    /// input relabels the current result, whichever control made it.
     var settings: AppSettings {
-        didSet { persistSettings() }
+        didSet {
+            persistSettings()
+            if settings.exclusions != oldValue.exclusions || settings.projectRoots != oldValue.projectRoots {
+                relabel()
+            }
+        }
     }
     private(set) var settingsError: String?
     let overriddenFields: Set<LaunchOverrides.Field>
@@ -144,19 +150,11 @@ final class AppStore {
         }
         let configuration = configuration
         let scanner = scanner
-        let policy = policy
         scanTask = Task { [weak self] in
             let result = await scanner.collect(configuration) { continuation.yield($0) }
             continuation.finish()
             await consumer.value
-            let labelled = ScanResult(
-                candidates: policy.apply(to: result.candidates),
-                categories: result.categories,
-                bytesSeen: result.bytesSeen,
-                filesSeen: result.filesSeen,
-                cancelled: result.cancelled
-            )
-            self?.finishScan(labelled)
+            self?.finishScan(result)
         }
     }
 
@@ -170,11 +168,24 @@ final class AppStore {
         phase = .scanning(monitor)
     }
 
+    /// Labels with the policy as it is now, so an exclusion added during the
+    /// scan applies to this result.
     private func finishScan(_ result: ScanResult) {
         scanTask = nil
-        reviewList = ReviewList(candidates: result.candidates)
-        selection = Selection(candidates: result.candidates)
-        phase = .reviewing(result)
+        let labelled = labelled(result)
+        reviewList = ReviewList(candidates: labelled.candidates)
+        selection = Selection(candidates: labelled.candidates)
+        phase = .reviewing(labelled)
+    }
+
+    private func labelled(_ result: ScanResult) -> ScanResult {
+        ScanResult(
+            candidates: policy.apply(to: result.candidates),
+            categories: result.categories,
+            bytesSeen: result.bytesSeen,
+            filesSeen: result.filesSeen,
+            cancelled: result.cancelled
+        )
     }
 
     // MARK: Exclusions
@@ -183,12 +194,10 @@ final class AppStore {
     /// runs again on the current result, so the row turns blocked at once.
     func exclude(_ candidate: Candidate) {
         settings.exclude(candidate)
-        relabel()
     }
 
     func removeExclusion(_ entry: String) {
         settings.removeExclusion(entry)
-        relabel()
     }
 
     func isExcluded(_ candidate: Candidate) -> Bool {
@@ -197,13 +206,7 @@ final class AppStore {
 
     private func relabel() {
         guard case .reviewing(let result) = phase else { return }
-        let relabelled = ScanResult(
-            candidates: policy.apply(to: result.candidates),
-            categories: result.categories,
-            bytesSeen: result.bytesSeen,
-            filesSeen: result.filesSeen,
-            cancelled: result.cancelled
-        )
+        let relabelled = labelled(result)
         var list = ReviewList(candidates: relabelled.candidates)
         list.query = reviewList.query
         list.sortOrder = reviewList.sortOrder
