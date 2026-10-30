@@ -40,8 +40,19 @@ public struct DiskUsageReport: Sendable, Hashable {
     }
 }
 
-/// lstat(2) facts the scanner needs before it walks a directory.
+extension FileIdentity {
+    init(_ status: stat) {
+        self.init(dev: UInt64(UInt32(bitPattern: status.st_dev)), ino: UInt64(status.st_ino))
+    }
+}
+
+/// lstat(2) facts the scanner and the policy need. The only lstat wrapper.
 public struct FileStatus: Sendable, Hashable {
+    public enum Failure: Error, Hashable {
+        case missing
+        case other(errno: Int32)
+    }
+
     public let identity: FileIdentity
     public let isDirectory: Bool
     public let isSymbolicLink: Bool
@@ -49,13 +60,22 @@ public struct FileStatus: Sendable, Hashable {
 
     /// nil when the path does not exist or cannot be stat'ed.
     public init?(lstatPath path: String) {
+        guard case .success(let status) = Self.lstat(path) else { return nil }
+        self = status
+    }
+
+    /// `lstat` with the reason for a failure. Pass a path without a trailing
+    /// slash: `lstat("link/")` follows the link, which would hide a symlink.
+    public static func lstat(_ path: String) -> Result<FileStatus, Failure> {
         var status = stat()
-        guard lstat(path, &status) == 0 else { return nil }
-        self.init(status)
+        guard Darwin.lstat(path, &status) == 0 else {
+            return .failure(errno == ENOENT || errno == ENOTDIR ? .missing : .other(errno: errno))
+        }
+        return .success(FileStatus(status))
     }
 
     init(_ status: stat) {
-        identity = FileIdentity(dev: UInt64(UInt32(bitPattern: status.st_dev)), ino: UInt64(status.st_ino))
+        identity = FileIdentity(status)
         let type = status.st_mode & S_IFMT
         isDirectory = type == S_IFDIR
         isSymbolicLink = type == S_IFLNK
@@ -72,6 +92,13 @@ extension URL {
             return String(path.dropLast())
         }
         return path
+    }
+
+    /// `fileSystemPath` without `.`/`..` segments or doubled slashes, so that
+    /// the same directory written two ways compares equal. Symlinks are not
+    /// resolved: the path itself is what the user sees and selected.
+    public var standardizedFileSystemPath: String {
+        standardizedFileURL.fileSystemPath
     }
 }
 
@@ -128,8 +155,7 @@ public enum DiskUsage {
             }
             guard let status = entry.pointee.fts_statp?.pointee else { continue }
             if status.st_nlink > 1 {
-                let identity = FileIdentity(dev: UInt64(UInt32(bitPattern: status.st_dev)), ino: UInt64(status.st_ino))
-                guard hardLinks.claim(identity) else { continue }
+                guard hardLinks.claim(FileIdentity(status)) else { continue }
             }
             report.allocatedBytes += Int64(status.st_blocks) * 512
             report.fileCount += 1

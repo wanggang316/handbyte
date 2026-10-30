@@ -41,35 +41,35 @@ public struct EligibilityPolicy: Sendable {
     public init(context: PolicyContext) {
         self.context = context
         exclusions = Set(context.exclusions.map { entry in
-            entry.hasPrefix("/") ? Self.normalizedPath(URL(filePath: entry)) : entry
+            entry.hasPrefix("/") ? URL(filePath: entry).standardizedFileSystemPath : entry
         })
         var roots: Set<String> = [
             "/",
-            Self.normalizedPath(context.home),
-            Self.normalizedPath(context.home.appending(path: "Library")),
-            Self.normalizedPath(context.home.appending(path: "Library/Containers")),
+            context.home.standardizedFileSystemPath,
+            context.home.appending(path: "Library").standardizedFileSystemPath,
+            context.home.appending(path: "Library/Containers").standardizedFileSystemPath,
         ]
         for root in context.projectRoots {
-            roots.insert(Self.normalizedPath(root))
+            roots.insert(root.standardizedFileSystemPath)
         }
         protectedRoots = roots
     }
 
     public func evaluate(_ candidate: Candidate) -> Eligibility {
-        let path = Self.normalizedPath(candidate.url)
+        let path = candidate.url.standardizedFileSystemPath
         if exclusions.contains(candidate.rule.id) || exclusions.contains(candidate.id) || exclusions.contains(path) {
             return .blocked(reason: "Excluded by user")
         }
         if protectedRoots.contains(path) {
             return .blocked(reason: "Protected location")
         }
-        switch FileProbe.lstat(candidate.url) {
+        switch FileStatus.lstat(path) {
         case .failure(.missing):
             return .blocked(reason: "Missing")
         case .failure(.other(let errno)):
             return .blocked(reason: "Cannot inspect: \(String(cString: strerror(errno)))")
         case .success(let status):
-            if status.isSymlink {
+            if status.isSymbolicLink {
                 return .blocked(reason: "Symbolic link")
             }
             if status.identity != candidate.identity {
@@ -96,42 +96,5 @@ public struct EligibilityPolicy: Sendable {
                 eligibility: evaluate(candidate)
             )
         }
-    }
-
-    /// Absolute path without `.`/`..` segments or a trailing slash, so that the
-    /// same directory written two ways compares equal. Symlinks are not
-    /// resolved: the candidate path itself is what the user sees and selected.
-    static func normalizedPath(_ url: URL) -> String {
-        let path = url.standardizedFileURL.path(percentEncoded: false)
-        if path.count > 1, path.hasSuffix("/") {
-            return String(path.dropLast())
-        }
-        return path
-    }
-}
-
-/// `lstat` reduced to what the policy and the tests need.
-enum FileProbe {
-    struct Status: Sendable, Hashable {
-        let identity: FileIdentity
-        let isSymlink: Bool
-    }
-
-    enum Failure: Error, Hashable {
-        case missing
-        case other(errno: Int32)
-    }
-
-    /// The trailing slash of a directory URL is dropped first: `lstat("link/")`
-    /// follows the link, which would hide a symlink swap.
-    static func lstat(_ url: URL) -> Result<Status, Failure> {
-        var st = stat()
-        guard Darwin.lstat(EligibilityPolicy.normalizedPath(url), &st) == 0 else {
-            return .failure(errno == ENOENT || errno == ENOTDIR ? .missing : .other(errno: errno))
-        }
-        return .success(Status(
-            identity: FileIdentity(dev: UInt64(UInt32(bitPattern: st.st_dev)), ino: UInt64(st.st_ino)),
-            isSymlink: (st.st_mode & S_IFMT) == S_IFLNK
-        ))
     }
 }

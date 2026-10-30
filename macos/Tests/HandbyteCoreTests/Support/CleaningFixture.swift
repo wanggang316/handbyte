@@ -66,7 +66,7 @@ final class CleaningFixture {
         rule: Rule? = nil,
         allocatedBytes: Int64 = 4096
     ) throws -> Candidate {
-        let status = try FileProbe.lstat(url).get()
+        let status = try FileStatus.lstat(url.fileSystemPath).get()
         return Candidate(
             rule: rule ?? self.rule(),
             url: url,

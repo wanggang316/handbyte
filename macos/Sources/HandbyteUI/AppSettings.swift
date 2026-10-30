@@ -131,7 +131,7 @@ extension AppSettings {
     /// preset, and the candidate id changes when the directory is recreated.
     /// The path is what the user saw and keeps matching across rescans.
     public static func exclusionEntry(for candidate: Candidate) -> String {
-        normalizedEntry(candidate.url.standardizedFileURL.path(percentEncoded: false))
+        normalizedEntry(candidate.url.standardizedFileSystemPath)
     }
 
     public mutating func exclude(_ candidate: Candidate) {
