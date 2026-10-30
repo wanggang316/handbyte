@@ -80,6 +80,25 @@ struct SettingsPolicyTests {
         #expect(!AppSettings.EntryError.unknownExclusion("keep").message.isEmpty)
     }
 
+    @Test func projectRootsStartWithHomeOrSlash() throws {
+        var settings = AppSettings()
+        settings.projectRoots = []
+        try settings.addProjectRoot(" ~/src ")
+        try settings.addProjectRoot("~/src")
+        try settings.addProjectRoot("/Volumes/Work")
+        #expect(settings.projectRoots == ["~/src", "/Volumes/Work"])
+
+        // A relative root would resolve against the working directory.
+        #expect(throws: AppSettings.EntryError.relativeProjectRoot("src")) {
+            try settings.addProjectRoot("src")
+        }
+        #expect(throws: AppSettings.EntryError.relativeProjectRoot("~src")) {
+            try settings.addProjectRoot("~src")
+        }
+        #expect(settings.projectRoots == ["~/src", "/Volumes/Work"])
+        #expect(!AppSettings.EntryError.relativeProjectRoot("src").message.isEmpty)
+    }
+
     @Test func excludedPathStaysBlockedWhenTheDirectoryIsRecreated() throws {
         let fixtureHome = FileManager.default.temporaryDirectory
             .appending(path: "hb-policy-\(UUID().uuidString)", directoryHint: .isDirectory)

@@ -130,11 +130,15 @@ extension AppSettings {
     public enum EntryError: Error, Hashable {
         /// Neither a path (`/…`, `~/…`) nor a catalog rule id.
         case unknownExclusion(String)
+        /// A project root that would resolve against the working directory.
+        case relativeProjectRoot(String)
 
         public var message: String {
             switch self {
             case .unknownExclusion(let entry):
                 "\"\(entry)\" is not a rule id or a path. Use a rule id such as xcode-archives, or a path starting with / or ~/."
+            case .relativeProjectRoot(let root):
+                "\"\(root)\" is not an absolute path. A project root starts with / or ~/."
             }
         }
     }
@@ -182,6 +186,25 @@ extension AppSettings {
     private mutating func append(exclusion entry: String) {
         guard !exclusions.contains(entry) else { return }
         exclusions.append(entry)
+    }
+}
+
+// MARK: Project roots
+
+extension AppSettings {
+    /// Adds a root as typed, a template (`~/src`) or an absolute path, so the
+    /// list shows what the user wrote. Duplicates are ignored.
+    public mutating func addProjectRoot(_ text: String) throws {
+        let root = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.isPath(root) else {
+            throw EntryError.relativeProjectRoot(root)
+        }
+        guard !projectRoots.contains(root) else { return }
+        projectRoots.append(root)
+    }
+
+    public mutating func removeProjectRoot(_ root: String) {
+        projectRoots.removeAll { $0 == root }
     }
 }
 

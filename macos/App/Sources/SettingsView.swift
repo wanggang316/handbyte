@@ -121,6 +121,7 @@ private struct ProjectRootsSection: View {
     @Binding var settings: AppSettings
     let overridden: Bool
     @State private var newRoot = ""
+    @State private var refusal: String?
 
     var body: some View {
         Section {
@@ -132,21 +133,25 @@ private struct ProjectRootsSection: View {
                 HStack {
                     Text(root).font(.body.monospaced())
                     Spacer()
-                    Button("Remove", systemImage: "minus.circle") {
-                        settings.projectRoots.removeAll { $0 == root }
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Remove project root \(root)")
+                    Button("Remove", systemImage: "minus.circle") { settings.removeProjectRoot(root) }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove project root \(root)")
                 }
             }
             HStack {
                 TextField("Add a project root", text: $newRoot, prompt: Text("~/src"))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(addTyped)
+                    .onChange(of: newRoot) { _, _ in refusal = nil }
                 Button("Add", action: addTyped)
                     .disabled(newRoot.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button("Choose…", action: choose)
+            }
+            if let refusal {
+                Text(refusal)
+                    .font(.callout)
+                    .foregroundStyle(.red)
             }
             if overridden {
                 OverrideNote(variable: "HANDBYTE_PROJECT_ROOTS")
@@ -159,14 +164,21 @@ private struct ProjectRootsSection: View {
     }
 
     private func addTyped() {
-        add(newRoot)
-        newRoot = ""
+        if add(newRoot) {
+            newRoot = ""
+        }
     }
 
-    private func add(_ root: String) {
-        let root = root.trimmingCharacters(in: .whitespaces)
-        guard !root.isEmpty, !settings.projectRoots.contains(root) else { return }
-        settings.projectRoots.append(root)
+    private func add(_ root: String) -> Bool {
+        do {
+            try settings.addProjectRoot(root)
+            return true
+        } catch let error as AppSettings.EntryError {
+            refusal = error.message
+        } catch {
+            refusal = error.localizedDescription
+        }
+        return false
     }
 
     private func choose() {
@@ -177,7 +189,7 @@ private struct ProjectRootsSection: View {
         panel.prompt = "Add"
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
-            add(url.standardizedFileURL.path(percentEncoded: false))
+            _ = add(url.standardizedFileSystemPath)
         }
     }
 }
