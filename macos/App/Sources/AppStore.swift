@@ -56,11 +56,8 @@ final class AppStore {
     private var scanTask: Task<Void, Never>?
     private var cleanTask: Task<Void, Never>?
 
-    init(
-        home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) {
-        self.home = home
+    init(environment: [String: String] = ProcessInfo.processInfo.environment) {
+        home = LaunchOverrides.home(environment: environment)
         self.environment = environment
         journalURL = OperationsJournal.defaultURL(home: home)
         settingsStore = SettingsStore(fileURL: SettingsStore.defaultURL(home: home))

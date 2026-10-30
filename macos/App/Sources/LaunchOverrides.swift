@@ -8,9 +8,19 @@ import HandbyteCore
 ///     HANDBYTE_MIN_SIZE=1K HANDBYTE_PROJECT_ROOTS=$TMPDIR/hb-fixture \
 ///       .dd/Build/Products/Debug/Handbyte.app/Contents/MacOS/Handbyte
 ///
+/// - `HANDBYTE_HOME`: directory used as the home folder for presets, settings,
+///   the operations log and the Full Disk Access probe, so a run against a
+///   fixture never reads or writes the real home.
 /// - `HANDBYTE_MIN_SIZE`: minimum candidate size in the Go CLI's syntax (`50M`).
 /// - `HANDBYTE_PROJECT_ROOTS`: comma-separated project roots that replace the defaults.
 enum LaunchOverrides {
+    static func home(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
+        if let path = environment["HANDBYTE_HOME"], !path.isEmpty {
+            return URL(filePath: path, directoryHint: .isDirectory)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+    }
+
     enum Field: Hashable {
         case minimumSize
         case projectRoots
