@@ -31,5 +31,9 @@ struct HandbyteApp: App {
                 CheckForUpdatesView(updater: updaterController.updater)
             }
         }
+        Settings {
+            SettingsView()
+                .environment(store)
+        }
     }
 }

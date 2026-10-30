@@ -6,6 +6,7 @@ import Observation
 /// Progress of a cleanup run: what the cleaner reported so far.
 struct CleanRun: Equatable {
     let total: Int
+    let action: CleanAction
     var outcomes: [CleanOutcome] = []
     var bytesClaimed: Int64 = 0
 
@@ -32,20 +33,55 @@ final class AppStore {
     var reviewList = ReviewList(candidates: [])
     var selection = Selection(candidates: [])
 
-    let configuration: ScanConfiguration
+    /// Saved on every change. A file that cannot be read starts from defaults
+    /// and `settingsError` tells the settings window why.
+    var settings: AppSettings {
+        didSet { persistSettings() }
+    }
+    private(set) var settingsError: String?
+    let overriddenFields: Set<LaunchOverrides.Field>
+
+    /// Probed at launch and again at the start of every scan.
+    private(set) var fullDiskAccess: FullDiskAccess.Status
+    /// The probe result when the current result set was scanned.
+    private(set) var scanLackedFullDiskAccess = false
+
+    let home: URL
     let journalURL: URL
+    private let settingsStore: SettingsStore
+    private let environment: [String: String]
 
     private let scanner = DiskScanner()
     private let cleaner = Cleaner()
     private var scanTask: Task<Void, Never>?
     private var cleanTask: Task<Void, Never>?
 
-    init(configuration: ScanConfiguration? = nil) {
-        var configuration = configuration ?? ScanConfiguration()
-        LaunchOverrides.apply(to: &configuration)
-        self.configuration = configuration
-        journalURL = OperationsJournal.defaultURL(home: configuration.home)
+    init(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
+        self.home = home
+        self.environment = environment
+        journalURL = OperationsJournal.defaultURL(home: home)
+        settingsStore = SettingsStore(fileURL: SettingsStore.defaultURL(home: home))
+        overriddenFields = LaunchOverrides.overridden(environment: environment)
+        fullDiskAccess = FullDiskAccess.probe(home: home)
+        do {
+            settings = try settingsStore.load()
+        } catch {
+            settings = AppSettings()
+            settingsError = "Settings file could not be read, defaults are in use: \(error.localizedDescription)"
+        }
     }
+
+    /// AppSettings plus the launch overrides, which win when set.
+    var configuration: ScanConfiguration {
+        var configuration = settings.scanConfiguration(home: home)
+        LaunchOverrides.apply(to: &configuration, environment: environment)
+        return configuration
+    }
+
+    var deletionMode: AppSettings.DeletionMode { settings.deletionMode }
 
     var isScanning: Bool {
         if case .scanning = phase { return true }
@@ -68,18 +104,34 @@ final class AppStore {
     }
 
     private var policy: EligibilityPolicy {
-        EligibilityPolicy(context: PolicyContext(
-            home: configuration.home,
-            projectRoots: configuration.projectRoots.map { PathTemplate.expand($0, home: configuration.home) },
-            exclusions: [],
-            runningApps: WorkspaceRunningAppsProbe()
-        ))
+        EligibilityPolicy(context: settings.policyContext(home: home, runningApps: WorkspaceRunningAppsProbe()))
+    }
+
+    private func persistSettings() {
+        do {
+            try settingsStore.save(settings)
+            settingsError = nil
+        } catch {
+            settingsError = "Settings could not be saved: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: Full Disk Access
+
+    func probeFullDiskAccess() {
+        fullDiskAccess = FullDiskAccess.probe(home: home)
+    }
+
+    func openFullDiskAccessSettings() {
+        NSWorkspace.shared.open(FullDiskAccess.settingsURL)
     }
 
     // MARK: Scan
 
     func startScan() {
         guard scanTask == nil else { return }
+        probeFullDiskAccess()
+        scanLackedFullDiskAccess = fullDiskAccess == .denied
         phase = .scanning(ScanMonitor(rules: configuration.rules))
 
         // Events arrive on scanner threads; the stream keeps their order and
@@ -126,6 +178,41 @@ final class AppStore {
         phase = .reviewing(result)
     }
 
+    // MARK: Exclusions
+
+    /// "Never clean this": the path joins the exclusion list and the policy
+    /// runs again on the current result, so the row turns blocked at once.
+    func exclude(_ candidate: Candidate) {
+        settings.exclude(candidate)
+        relabel()
+    }
+
+    func removeExclusion(_ entry: String) {
+        settings.removeExclusion(entry)
+        relabel()
+    }
+
+    func isExcluded(_ candidate: Candidate) -> Bool {
+        settings.excludes(candidate)
+    }
+
+    private func relabel() {
+        guard case .reviewing(let result) = phase else { return }
+        let relabelled = ScanResult(
+            candidates: policy.apply(to: result.candidates),
+            categories: result.categories,
+            bytesSeen: result.bytesSeen,
+            filesSeen: result.filesSeen,
+            cancelled: result.cancelled
+        )
+        var list = ReviewList(candidates: relabelled.candidates)
+        list.query = reviewList.query
+        list.sortOrder = reviewList.sortOrder
+        reviewList = list
+        selection = Selection(candidates: relabelled.candidates, keeping: selection)
+        phase = .reviewing(relabelled)
+    }
+
     // MARK: Confirm and clean
 
     func requestConfirmation() {
@@ -138,10 +225,14 @@ final class AppStore {
         phase = .reviewing(result)
     }
 
-    func confirmClean() {
-        guard case .confirming = phase, cleanTask == nil else { return }
+    /// `acknowledged` is the distinct confirmation for permanent deletion.
+    /// Without it, permanent deletion is refused and nothing happens.
+    func confirmClean(acknowledged: Bool = false) {
+        guard case .confirming = phase, cleanTask == nil,
+              let action = CleanConfirmation.action(for: deletionMode, acknowledged: acknowledged)
+        else { return }
         let targets = selection.selectedCandidates
-        phase = .cleaning(CleanRun(total: targets.count))
+        phase = .cleaning(CleanRun(total: targets.count, action: action))
 
         let (updates, continuation) = AsyncStream.makeStream(of: CleanProgress.self)
         let consumer = Task { [weak self] in
@@ -153,7 +244,7 @@ final class AppStore {
         let policy = policy
         let journal = OperationsJournal(fileURL: journalURL)
         cleanTask = Task { [weak self] in
-            let outcomes = await cleaner.clean(targets, action: .trash, policy: policy, journal: journal) {
+            let outcomes = await cleaner.clean(targets, action: action, policy: policy, journal: journal) {
                 continuation.yield($0)
             }
             continuation.finish()
