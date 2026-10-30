@@ -44,10 +44,11 @@ private let goRuleIDs: Set<String> = [
 
     let derived = try #require(Catalog.presets.first { $0.id == "xcode-derived" })
     #expect(derived.location(in: home)?.path == "/Volumes/Test/alice/Library/Developer/Xcode/DerivedData")
-    #expect(derived.expandChildren == false)
+    #expect(derived.expandChildren == true)
 
     let deviceSupport = try #require(Catalog.presets.first { $0.pathTemplate == "~/Library/Developer/Xcode/iOS DeviceSupport" })
     #expect(deviceSupport.location(in: home)?.path == "/Volumes/Test/alice/Library/Developer/Xcode/iOS DeviceSupport")
+    #expect(deviceSupport.expandChildren == true)
 
     let caches = try #require(Catalog.presets.first { $0.id == "library-caches" })
     #expect(caches.expandChildren == true)

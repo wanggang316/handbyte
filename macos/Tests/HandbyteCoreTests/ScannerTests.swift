@@ -37,24 +37,24 @@ private func configuration(
     let home = try TemporaryHome()
     defer { home.cleanUp() }
     for index in 0..<3 {
-        try home.writeFile("Library/Developer/Xcode/DerivedData/Mod-\(index)/a.o", size: 100_000)
+        try home.writeFile("Library/Caches/go-build/Mod-\(index)/a.o", size: 100_000)
     }
     try home.writeFile("Library/Caches/Homebrew/x.tar.gz", size: 50_000)
     try home.writeFile(".npm/_cacache/index", size: 100)
 
     let result = await DiskScanner().collect(configuration(
-        home, rules: rules("npm-cache", "brew-cache", "xcode-derived"), minimumSize: 8192
+        home, rules: rules("npm-cache", "brew-cache", "go-build"), minimumSize: 8192
     ))
 
-    #expect(result.candidates.map(\.rule.id) == ["xcode-derived", "brew-cache"])
-    let derived = try #require(result.candidates.first)
-    #expect(derived.url.path == home.path("Library/Developer/Xcode/DerivedData").path)
-    #expect(derived.size.fileCount == 3)
-    #expect(derived.size.allocatedBytes == (try home.allocatedBytes("Library/Developer/Xcode/DerivedData/Mod-0/a.o")) * 3)
-    #expect(derived.size.partial == false)
-    #expect(derived.eligibility == .eligible)
-    #expect(derived.identity == FileStatus(lstatPath: derived.url.path)?.identity)
-    #expect(derived.lastActivity.map { Date().timeIntervalSince($0) < 60 } == true)
+    #expect(result.candidates.map(\.rule.id) == ["go-build", "brew-cache"])
+    let goBuild = try #require(result.candidates.first)
+    #expect(goBuild.url.path == home.path("Library/Caches/go-build").path)
+    #expect(goBuild.size.fileCount == 3)
+    #expect(goBuild.size.allocatedBytes == (try home.allocatedBytes("Library/Caches/go-build/Mod-0/a.o")) * 3)
+    #expect(goBuild.size.partial == false)
+    #expect(goBuild.eligibility == .eligible)
+    #expect(goBuild.identity == FileStatus(lstatPath: goBuild.url.path)?.identity)
+    #expect(goBuild.lastActivity.map { Date().timeIntervalSince($0) < 60 } == true)
     #expect(result.filesSeen == 5)
     #expect(result.cancelled == false)
 }
@@ -91,18 +91,18 @@ private func configuration(
 @Test func categoryStatesReportCompletePartialAndUnavailable() async throws {
     let home = try TemporaryHome()
     defer { home.cleanUp() }
-    try home.writeFile("Library/Developer/Xcode/DerivedData/ok/a.o", size: 10)
-    try home.writeFile("Library/Developer/Xcode/DerivedData/locked/b.o", size: 10)
-    try home.makeUnreadable("Library/Developer/Xcode/DerivedData/locked")
+    try home.writeFile("Library/Developer/CoreSimulator/Caches/ok/a.o", size: 10)
+    try home.writeFile("Library/Developer/CoreSimulator/Caches/locked/b.o", size: 10)
+    try home.makeUnreadable("Library/Developer/CoreSimulator/Caches/locked")
     try home.writeFile("Library/Caches/Homebrew/x", size: 10)
 
-    let result = await DiskScanner().collect(configuration(home, rules: rules("xcode-derived", "brew-cache", "downloads")))
+    let result = await DiskScanner().collect(configuration(home, rules: rules("coresim-cache", "brew-cache", "downloads")))
 
     #expect(result.categories == [.xcode: .partial, .devCache: .complete, .other: .unavailable])
-    let derived = try #require(result.candidates.first { $0.rule.id == "xcode-derived" })
-    #expect(derived.size.partial == true)
-    #expect(derived.size.errorCount == 1)
-    #expect(derived.size.fileCount == 1)
+    let simulatorCaches = try #require(result.candidates.first { $0.rule.id == "coresim-cache" })
+    #expect(simulatorCaches.size.partial == true)
+    #expect(simulatorCaches.size.errorCount == 1)
+    #expect(simulatorCaches.size.fileCount == 1)
 }
 
 @Test func unreadableParentOfExpandedChildrenMarksTheCategoryPartial() async throws {
@@ -177,10 +177,10 @@ private final class CancelOnFirstCandidate: Sendable {
     let home = try TemporaryHome()
     defer { home.cleanUp() }
     try home.writeFile("Library/Caches/Homebrew/x", size: 10)
-    try home.writeFile("Library/Developer/Xcode/DerivedData/a.o", size: 10)
+    try home.writeFile("Library/Developer/CoreSimulator/Caches/a.o", size: 10)
 
     var events: [ScanEvent] = []
-    for await event in DiskScanner().scan(configuration(home, rules: rules("brew-cache", "xcode-derived", "downloads"))) {
+    for await event in DiskScanner().scan(configuration(home, rules: rules("brew-cache", "coresim-cache", "downloads"))) {
         events.append(event)
     }
 
@@ -238,9 +238,12 @@ private final class CancelOnFirstCandidate: Sendable {
 @Test func presetBeatsArtifactPatternForTheSameDirectory() async throws {
     let home = try TemporaryHome()
     defer { home.cleanUp() }
-    try home.writeFile("Library/Developer/Xcode/DerivedData/a.o", size: 10)
+    // `xdg-cache` expands its children, so `~/.cache/target` is a preset
+    // candidate and also matches the `target` artifact pattern under the root.
+    try home.writeFile(".cache/target/a.o", size: 10)
 
-    let result = await DiskScanner().collect(configuration(home, roots: ["~/Library"], skipProjectScan: false))
+    let result = await DiskScanner().collect(configuration(home, roots: ["~/.cache"], skipProjectScan: false))
 
-    #expect(result.candidates.map(\.rule.id) == ["xcode-derived"])
+    #expect(result.candidates.map(\.rule.id) == ["xdg-cache"])
+    #expect(result.candidates.first?.url.path == home.path(".cache/target").path)
 }

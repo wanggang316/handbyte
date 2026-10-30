@@ -17,19 +17,19 @@ public enum Catalog {
 
     public static let presets: [Rule] = [
         // Xcode
-        preset(id: "xcode-derived", path: "~/Library/Developer/Xcode/DerivedData",
+        preset(id: "xcode-derived", path: "~/Library/Developer/Xcode/DerivedData", expandChildren: true,
                category: .xcode, safety: .auto, owners: [xcodeBundleID],
                summary: "Xcode build intermediates.",
                recovery: "Regenerated on next build."),
-        preset(id: "xcode-devicesupport", path: "~/Library/Developer/Xcode/iOS DeviceSupport",
+        preset(id: "xcode-devicesupport", path: "~/Library/Developer/Xcode/iOS DeviceSupport", expandChildren: true,
                category: .xcode, safety: .auto, owners: [xcodeBundleID],
                summary: "Symbols for connected iOS devices.",
                recovery: "Re-downloaded when the device connects again."),
-        preset(id: "xcode-devicesupport", path: "~/Library/Developer/Xcode/watchOS DeviceSupport",
+        preset(id: "xcode-devicesupport", path: "~/Library/Developer/Xcode/watchOS DeviceSupport", expandChildren: true,
                category: .xcode, safety: .auto, owners: [xcodeBundleID],
                summary: "Symbols for connected watchOS devices.",
                recovery: "Re-downloaded when the device connects again."),
-        preset(id: "xcode-devicesupport", path: "~/Library/Developer/Xcode/tvOS DeviceSupport",
+        preset(id: "xcode-devicesupport", path: "~/Library/Developer/Xcode/tvOS DeviceSupport", expandChildren: true,
                category: .xcode, safety: .auto, owners: [xcodeBundleID],
                summary: "Symbols for connected tvOS devices.",
                recovery: "Re-downloaded when the device connects again."),
@@ -145,8 +145,8 @@ public enum Catalog {
                recovery: "Re-downloaded by Claude when a VM feature is used again."),
         preset(id: "docker", path: "~/.docker",
                category: .vms, safety: .caution, owners: ["com.docker.docker"],
-               summary: "Docker config and data.",
-               recovery: "Not regenerable. Run `docker system prune` first; images are re-pulled on demand."),
+               summary: "Docker configuration and runtime data.",
+               recovery: "Not regenerable. Inspect storage in Docker Desktop first; images are re-pulled on demand."),
 
         // User state
         preset(id: "trash", path: "~/.Trash",
