@@ -41,7 +41,7 @@ rule is added to either side; remove the row when it is removed from both.
 | `jetbrains` | Implemented | Implemented | |
 | `codex` | Implemented | Implemented | |
 | `xdg-cache` | Implemented | Implemented | |
-| `library-caches` | Implemented | Implemented | |
+| `library-caches` | Intentional difference | Implemented | The CLI also lists a child of `~/Library/Caches` that a more specific preset matches (for example `go-build`), so that directory appears twice. The app deduplicates by file identity and keeps the more specific rule. |
 | `library-logs` | Implemented | Implemented | |
 | `containers` | Implemented | Implemented | |
 | `orbstack` | Implemented | Implemented | |
@@ -69,3 +69,9 @@ rule is added to either side; remove the row when it is removed from both.
 | `artifact:.ruff_cache` | Implemented | Implemented | |
 | `artifact:.venv` | Implemented | Implemented | |
 | `artifact:venv` | Implemented | Implemented | |
+
+Scan-wide differences that belong to no single rule:
+
+| Behaviour | CLI | App | Note |
+|---|---|---|---|
+| Hard links | Intentional difference | Implemented | The CLI counts every hard link to a file, so a file with two links is counted twice. The app counts an inode once per scan, so the sum over all candidates equals the bytes a cleanup can free. `macos/scripts/parity.sh` reports both effects as expected size differences. |
