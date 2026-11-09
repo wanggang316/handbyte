@@ -1,33 +1,42 @@
-# Release the Handbyte macOS app on tags app/vX.Y.Z (the CLI uses v* in release.yml).
+# Build the Handbyte macOS app for a tag app/vX.Y.Z (the CLI uses v* in
+# release.yml) and attach it to a draft GitHub Release.
 #
-# Builds a Developer ID signed, notarized DMG with macos/scripts/release.sh,
-# publishes it to a GitHub Release named after the tag, then commits the
-# Sparkle appcast and release notes to main so GitHub Pages serves them.
+# macos/scripts/release.sh signs with Developer ID, notarizes, builds the DMG
+# and writes the Sparkle appcast. The draft release carries
+# Handbyte-X.Y.Z.dmg, its .sha256, the stable-named Handbyte.dmg and
+# appcast.xml. Publishing the draft is a human step; macos-publish.yml then
+# copies the appcast to GitHub Pages and updates the Homebrew cask.
 #
 # Repository secrets (Settings > Secrets and variables > Actions). None are
-# created by automation; a human sets each one:
+# created by automation; a human sets each one. The names match the codans
+# repository so the same stored values can be reused:
 #
-#   DEVELOPER_ID_P12_BASE64   Keychain Access > export "Developer ID Application:
-#                             WANG GANG (HC438T2B8P)" with its private key as .p12,
-#                             then `base64 -i DeveloperID.p12 | pbcopy`.
-#   DEVELOPER_ID_P12_PASSWORD Password chosen in the .p12 export dialog.
-#   APPLE_API_KEY_BASE64      App Store Connect > Users and Access > Integrations >
-#                             Team Keys: create a key (role Developer), download the
-#                             .p8 once, then `base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy`.
-#   APPLE_API_KEY_ID          The 10-character Key ID shown next to that key.
-#   APPLE_API_ISSUER          The Issuer ID (UUID) at the top of the Team Keys page.
-#   SPARKLE_PRIVATE_KEY       On the machine that holds the Sparkle key, run
-#                             `<sparkle>/bin/generate_keys -x key.txt`, paste the
-#                             file content, then `rm -P key.txt`. Its public half is
-#                             SUPublicEDKey in macos/project.yml.
+#   DEVELOPER_ID_CERT_P12_BASE64  Keychain Access > export "Developer ID
+#                                 Application: WANG GANG (HC438T2B8P)" with its
+#                                 private key as .p12, then `base64 -i cert.p12`.
+#   DEVELOPER_ID_CERT_PASSWORD    Password chosen in the .p12 export dialog.
+#   AC_API_KEY_ID                 App Store Connect > Users and Access >
+#                                 Integrations > Team Keys: the 10-character Key ID.
+#   AC_API_ISSUER_ID              The Issuer ID (UUID) at the top of that page.
+#   AC_API_KEY_P8                 `base64 -i AuthKey_XXXXXXXXXX.p8` of the key
+#                                 downloaded once when it was created.
+#   SPARKLE_PRIVATE_KEY           `<sparkle>/bin/generate_keys -x key.txt` on the
+#                                 machine that holds the Sparkle key; the file
+#                                 content. Its public half is SUPublicEDKey in
+#                                 macos/project.yml.
 #
-# GITHUB_TOKEN (automatic) creates the release and pushes to main.
+# GITHUB_TOKEN (automatic) creates the draft release.
 name: macos-release
 
 on:
   push:
     tags:
       - 'app/v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build again (app/vX.Y.Z)'
+        required: true
 
 permissions:
   contents: write
@@ -38,32 +47,60 @@ concurrency:
 
 jobs:
   release:
-    name: sign, notarize, publish
+    name: sign, notarize, draft release
     # Hosted runners have no Xcode 27; Xcode 26.x builds a tools-version 6.2 package.
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # build number is the commit count; release notes need tags
+      - name: Resolve tag and version
+        id: meta
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          if [[ ! "$TAG" =~ ^app/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag '$TAG' does not match app/vX.Y.Z"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#app/v}" >> "$GITHUB_OUTPUT"
 
       - name: Check secrets
         env:
-          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
-          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
-          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          DEVELOPER_ID_CERT_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 }}
+          DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
+          AC_API_KEY_P8: ${{ secrets.AC_API_KEY_P8 }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           missing=0
-          for name in DEVELOPER_ID_P12_BASE64 DEVELOPER_ID_P12_PASSWORD APPLE_API_KEY_BASE64 \
-                      APPLE_API_KEY_ID APPLE_API_ISSUER SPARKLE_PRIVATE_KEY; do
+          for name in DEVELOPER_ID_CERT_P12_BASE64 DEVELOPER_ID_CERT_PASSWORD AC_API_KEY_ID \
+                      AC_API_ISSUER_ID AC_API_KEY_P8 SPARKLE_PRIVATE_KEY; do
             if [ -z "${!name}" ]; then
               echo "::error::secret $name is not set (see the header of this workflow)"
               missing=1
             fi
           done
           exit $missing
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+
+      - name: Verify tag matches project.yml
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          source macos/scripts/release-lib.sh
+          PROJECT_VERSION="$(release_marketing_version macos/project.yml)"
+          if [ "$PROJECT_VERSION" != "$VERSION" ]; then
+            echo "::error::tag version $VERSION != project.yml MARKETING_VERSION $PROJECT_VERSION; run make -C macos bump-version before tagging"
+            exit 1
+          fi
+          release_changelog_section macos/CHANGELOG.md "$VERSION" > /dev/null
 
       - name: Select Xcode
         run: |
@@ -82,8 +119,8 @@ jobs:
 
       - name: Import Developer ID certificate
         env:
-          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
-          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          DEVELOPER_ID_CERT_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 }}
+          DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
         run: |
           set -euo pipefail
           # The runner context is not available in job-level env, so the
@@ -91,69 +128,57 @@ jobs:
           KEYCHAIN_PATH="$RUNNER_TEMP/release.keychain-db"
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
           KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
-          echo "$DEVELOPER_ID_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          printf '%s' "$DEVELOPER_ID_CERT_P12_BASE64" | tr -d ' \n\r\t' | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$RUNNER_TEMP/cert.p12" -P "$DEVELOPER_ID_P12_PASSWORD" -A \
+          security import "$RUNNER_TEMP/cert.p12" -P "$DEVELOPER_ID_CERT_PASSWORD" -A \
             -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
-            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          security default-keychain -s "$KEYCHAIN_PATH"
           rm -f "$RUNNER_TEMP/cert.p12"
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep 'Developer ID Application' | head -1 | awk '{print $2}')"
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::no Developer ID Application identity after import"
+            exit 1
+          fi
+          echo "CODESIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Build, sign, notarize, package
         env:
-          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
-          NOTARY_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          NOTARY_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
+          AC_API_KEY_P8: ${{ secrets.AC_API_KEY_P8 }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          export NOTARY_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
-          echo "$APPLE_API_KEY_BASE64" | base64 --decode > "$NOTARY_API_KEY_PATH"
-          VERSION="${GITHUB_REF_NAME#app/v}"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          make -C macos release VERSION="$VERSION"
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: make -C macos release VERSION="$VERSION"
 
-      # Re-entrant: a rerun after a later step failed finds the release in
-      # place and replaces its asset instead of failing.
-      - name: Create GitHub Release
+      # Re-entrant: a rerun finds the draft in place and replaces its assets.
+      # --latest=false keeps releases/latest on the CLI, which install.sh reads.
+      - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
           set -euo pipefail
-          DMG="macos/dist/Handbyte-$VERSION.dmg"
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$DMG" --clobber
+          cd macos/dist
+          ASSETS=("Handbyte-$VERSION.dmg" "Handbyte-$VERSION.dmg.sha256" Handbyte.dmg appcast.xml)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" --notes-file "Handbyte-$VERSION.md"
           else
-            gh release create "$GITHUB_REF_NAME" \
+            gh release create "$TAG" \
+              --draft \
+              --latest=false \
               --title "Handbyte $VERSION" \
-              --generate-notes \
-              "$DMG"
+              --notes-file "Handbyte-$VERSION.md" \
+              "${ASSETS[@]}"
           fi
-
-      # The appcast points at the release asset uploaded above, so this runs last.
-      # docs/appcast.xml also switches the landing page download button on.
-      - name: Publish appcast to main
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout -B main origin/main
-          mkdir -p docs/releases
-          cp macos/dist/appcast.xml docs/appcast.xml
-          cp macos/dist/release-notes/* docs/releases/
-          git add docs/appcast.xml docs/releases
-          git commit -m "Publish appcast for Handbyte $VERSION"
-          git push origin main
-
-      - name: Remove notarization key
-        if: always()
-        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
+          gh release view "$TAG" --json isDraft,url,assets --jq '{isDraft, url, assets: [.assets[].name]}'
 
       - name: Remove temporary keychain
         if: always()
-        run: security delete-keychain "$KEYCHAIN_PATH" || true
+        run: security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
