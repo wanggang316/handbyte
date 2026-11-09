@@ -35,17 +35,16 @@ make install                                        # → $HOME/.local/bin/handb
 
 Handbyte.app is a native SwiftUI app with the same cleanup rules as the CLI.
 It requires macOS 14 or later, is signed with a Developer ID and notarized,
-and updates itself with Sparkle.
+and updates itself with Sparkle. Its source and releases are in
+[wanggang316/handbyte-macos](https://github.com/wanggang316/handbyte-macos).
 
 - Download the DMG from [handbyte.gumpw.com](https://handbyte.gumpw.com) or
-  from the [`app/v*` releases](https://github.com/wanggang316/handbyte/releases?q=app%2Fv),
-  then drag Handbyte to Applications.
+  from that repository's releases, then drag Handbyte to Applications.
 - Or with Homebrew: `brew install --cask wanggang316/tap/handbyte`.
 
 The app keeps its own settings in `~/Library/Application Support/Handbyte/`.
-The source is in [`macos/`](macos/); [`SYNC.md`](SYNC.md) records how the app
-and the CLI stay aligned, and [`macos/CHANGELOG.md`](macos/CHANGELOG.md) has
-the app release notes.
+This repository hosts the website in `docs/`, including the Sparkle feed
+`docs/appcast.xml`, which the app repository's publish workflow writes.
 
 ## Uninstall
 
