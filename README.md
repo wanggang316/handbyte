@@ -1,6 +1,6 @@
 # handbyte
 
-An interactive macOS disk cleanup CLI.
+An interactive macOS disk cleanup CLI, and a native macOS app.
 
 `handbyte` helps you review caches and build output before cleanup. It groups
 candidates by application or project, explains the rebuild cost, and checks
@@ -30,6 +30,22 @@ From source (requires Go 1.26+):
 go install github.com/wanggang316/handbyte@latest   # or
 make install                                        # → $HOME/.local/bin/handbyte
 ```
+
+### macOS app
+
+Handbyte.app is a native SwiftUI app with the same cleanup rules as the CLI.
+It requires macOS 14 or later, is signed with a Developer ID and notarized,
+and updates itself with Sparkle.
+
+- Download the DMG from [handbyte.gumpw.com](https://handbyte.gumpw.com) or
+  from the [`app/v*` releases](https://github.com/wanggang316/handbyte/releases?q=app%2Fv),
+  then drag Handbyte to Applications.
+- Or with Homebrew: `brew install --cask wanggang316/tap/handbyte`.
+
+The app keeps its own settings in `~/Library/Application Support/Handbyte/`.
+The source is in [`macos/`](macos/); [`SYNC.md`](SYNC.md) records how the app
+and the CLI stay aligned, and [`macos/CHANGELOG.md`](macos/CHANGELOG.md) has
+the app release notes.
 
 ## Uninstall
 

@@ -1,0 +1,15 @@
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# xcodegen output; regenerate with `make generate`
+*.xcodeproj
+App/Info.plist
+App/Handbyte.entitlements
+
+# Build products
+DerivedData/
+.dd/
+build/
+dist/
