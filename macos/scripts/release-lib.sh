@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
-# Helper functions for macos/scripts/release.sh. Source this file; do not run it.
-# Tests: macos/scripts/tests/release-lib.test.sh
+# Helper functions for macos/scripts/release.sh and bump-version.sh. Source
+# this file; do not run it. Tests: macos/scripts/tests/release-lib.test.sh
 
-# Print MARKETING_VERSION from an xcodegen project.yml.
-release_marketing_version() {
-  local project_yml=$1 version
-  version="$(sed -n -E 's/^[[:space:]]*MARKETING_VERSION:[[:space:]]*"?([^"[:space:]]+)"?[[:space:]]*$/\1/p' "$project_yml" | head -1)"
-  if [[ -z "$version" ]]; then
-    echo "release-lib: MARKETING_VERSION not found in $project_yml" >&2
+# Print one quoted build setting from an xcodegen project.yml.
+release_project_setting() {
+  local project_yml=$1 key=$2 value
+  value="$(sed -n -E "s/^[[:space:]]*$key:[[:space:]]*\"?([^\"[:space:]]+)\"?[[:space:]]*\$/\1/p" "$project_yml" | head -1)"
+  if [[ -z "$value" ]]; then
+    echo "release-lib: $key not found in $project_yml" >&2
     return 1
   fi
-  printf '%s\n' "$version"
+  printf '%s\n' "$value"
+}
+
+# Print MARKETING_VERSION (X.Y.Z) from project.yml.
+release_marketing_version() {
+  release_project_setting "$1" MARKETING_VERSION
+}
+
+# Print CURRENT_PROJECT_VERSION (the Sparkle build number) from project.yml.
+release_build_number() {
+  release_project_setting "$1" CURRENT_PROJECT_VERSION
 }
 
 # Print the version part of an app release tag such as app/v1.2.3.
@@ -24,49 +34,44 @@ release_version_from_tag() {
   fi
 }
 
-# Print the build number for a checkout: the number of commits reachable from HEAD.
-release_build_number() {
-  local repo=$1
-  git -C "$repo" rev-list --count HEAD
-}
-
-html_escape() {
-  sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'
-}
-
-# Read one change per line on stdin and print a standalone HTML release notes page.
-# A full document (with DOCTYPE) makes generate_appcast publish it as a
-# sparkle:releaseNotesLink instead of embedding it.
-release_notes_html() {
-  local version=$1 items="" line
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    items+="    <li>$(printf '%s' "$line" | html_escape)</li>"$'\n'
-  done
-  cat <<HTML
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Handbyte $version</title>
-<style>
-  body { font: 14px/1.5 -apple-system, system-ui, sans-serif; margin: 20px; color: #1d1d1f; }
-  h1 { font-size: 18px; margin: 0 0 12px; }
-  ul { padding-left: 20px; }
-  @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: #1e1e1e; } }
-</style>
-</head>
-<body>
-<h1>Handbyte $version</h1>
-HTML
-  if [[ -n "$items" ]]; then
-    printf '<ul>\n%s</ul>\n' "$items"
-  else
-    printf '<p>No changes recorded.</p>\n'
+# Print the next build number in the YYYYMMDDNNN scheme.
+#   release_next_build <current> <published-max-or-empty> <today YYYYMMDD>
+# The higher of the local and the published build is the floor. On the same
+# day the sequence continues; on a new day it starts again at 001. Sparkle
+# compares this number, so it must grow with every published build, also when
+# MARKETING_VERSION does not change.
+release_next_build() {
+  local current=$1 published=${2:-} today=$3
+  local floor=$current
+  if [[ -n "$published" ]] && (( published > floor )); then
+    floor=$published
   fi
-  cat <<HTML
-</body>
-</html>
-HTML
+  if (( floor >= today * 1000 )); then
+    printf '%d\n' $((floor + 1))
+  else
+    printf '%s001\n' "$today"
+  fi
+}
+
+# Print the highest <sparkle:version> in an appcast file, or nothing.
+release_appcast_max_build() {
+  local appcast=$1
+  [[ -f "$appcast" ]] || return 0
+  grep -oE '<sparkle:version>[^<]+' "$appcast" | sed 's/<sparkle:version>//' | sort -n | tail -1 || true
+}
+
+# Print the body of the "## [X.Y.Z]" section of a Keep a Changelog file,
+# without its heading and without leading or trailing blank lines. A section
+# with category headers but no "- " entries counts as missing.
+release_changelog_section() {
+  local changelog=$1 version=$2 body
+  body="$(awk -v v="$version" '
+    /^## \[/ { if (found) exit; if (index($0, "## [" v "]") == 1) { found = 1; next } }
+    found { print }
+  ' "$changelog" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' | sed '/./,$!d')"
+  if ! grep -q '^- ' <<<"$body"; then
+    echo "release-lib: no '## [$version]' section with entries in $changelog" >&2
+    return 1
+  fi
+  printf '%s\n' "$body"
 }

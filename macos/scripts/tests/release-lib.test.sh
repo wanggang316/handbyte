@@ -33,17 +33,19 @@ assert_fails() {
   fi
 }
 
-# --- release_marketing_version -------------------------------------------
+# --- project.yml settings --------------------------------------------------
 cat > "$TMP/project.yml" <<'YML'
 targets:
   Handbyte:
     settings:
       base:
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "20261109001"
         MARKETING_VERSION: "0.3.1"
 YML
 assert_eq "marketing version is read from project.yml" \
   "0.3.1" "$(release_marketing_version "$TMP/project.yml")"
+assert_eq "build number is read from project.yml" \
+  "20261109001" "$(release_build_number "$TMP/project.yml")"
 
 printf 'name: X\n' > "$TMP/empty.yml"
 assert_fails "marketing version fails when the key is missing" \
@@ -57,33 +59,57 @@ assert_eq "pre-release suffix is preserved" \
 assert_fails "CLI tag is rejected" release_version_from_tag "v1.2.3"
 assert_fails "non-numeric version is rejected" release_version_from_tag "app/vlatest"
 
-# --- release_build_number --------------------------------------------------
-git -C "$TMP" init -q repo
-for i in 1 2 3; do
-  git -C "$TMP/repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "c$i"
-done
-assert_eq "build number is the commit count" \
-  "3" "$(release_build_number "$TMP/repo")"
+# --- release_next_build ------------------------------------------------------
+assert_eq "first build of a day starts at 001" \
+  "20261109001" "$(release_next_build 1 "" 20261109)"
+assert_eq "same-day build continues the sequence" \
+  "20261109003" "$(release_next_build 20261109002 "" 20261109)"
+assert_eq "published build is the floor when it is higher" \
+  "20261109006" "$(release_next_build 20261109002 20261109005 20261109)"
+assert_eq "new day resets the sequence" \
+  "20261110001" "$(release_next_build 20261109007 20261109009 20261110)"
 
-# --- release_notes_html ----------------------------------------------------
-NOTES="$(printf 'Fix <Trash> move\nAdd "Put Back" & journal\n' | release_notes_html "1.2.3")"
-assert_eq "release notes are a full HTML document" \
-  "<!DOCTYPE html>" "$(printf '%s\n' "$NOTES" | head -1)"
-case "$NOTES" in
-  *"<title>Handbyte 1.2.3</title>"*) echo "ok   release notes carry the version in the title" ;;
-  *) echo "FAIL release notes carry the version in the title"; FAILED=1 ;;
-esac
-case "$NOTES" in
-  *"<li>Fix &lt;Trash&gt; move</li>"*"<li>Add &quot;Put Back&quot; &amp; journal</li>"*)
-    echo "ok   release notes escape HTML in commit subjects" ;;
-  *) echo "FAIL release notes escape HTML in commit subjects"; printf '%s\n' "$NOTES"; FAILED=1 ;;
-esac
-EMPTY="$(printf '' | release_notes_html "1.2.3")"
-case "$EMPTY" in
-  *"<li>"*) echo "FAIL empty input yields no list items"; FAILED=1 ;;
-  *"No changes recorded."*) echo "ok   empty input yields a placeholder paragraph" ;;
-  *) echo "FAIL empty input yields a placeholder paragraph"; FAILED=1 ;;
-esac
+# --- release_appcast_max_build ------------------------------------------------
+cat > "$TMP/appcast.xml" <<'XML'
+<item><sparkle:version>20261101002</sparkle:version></item>
+<item><sparkle:version>20261109001</sparkle:version></item>
+XML
+assert_eq "highest published build is found" \
+  "20261109001" "$(release_appcast_max_build "$TMP/appcast.xml")"
+assert_eq "missing appcast yields no build" \
+  "" "$(release_appcast_max_build "$TMP/none.xml")"
+
+# --- release_changelog_section ------------------------------------------------
+cat > "$TMP/CHANGELOG.md" <<'MD'
+# Changelog
+
+## [Unreleased]
+
+### Added
+
+## [0.2.0] - 2026-11-20
+
+### Added
+
+- **Second** release.
+
+## [0.1.0] - 2026-11-09
+
+### Added
+
+- **First** release.
+- Another line.
+MD
+assert_eq "changelog section is extracted without its heading" \
+  "$(printf '### Added\n\n- **Second** release.')" \
+  "$(release_changelog_section "$TMP/CHANGELOG.md" 0.2.0)"
+assert_eq "last changelog section runs to the end of the file" \
+  "$(printf '### Added\n\n- **First** release.\n- Another line.')" \
+  "$(release_changelog_section "$TMP/CHANGELOG.md" 0.1.0)"
+assert_fails "missing changelog section fails" \
+  release_changelog_section "$TMP/CHANGELOG.md" 9.9.9
+assert_fails "empty Unreleased section fails" \
+  release_changelog_section "$TMP/CHANGELOG.md" Unreleased
 
 # --- release.sh argument parsing -------------------------------------------
 # Parsing happens before release.sh touches the file system, so this is safe.

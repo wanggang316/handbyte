@@ -1,4 +1,4 @@
-.PHONY: build test test-scripts sync-check parity generate app release clean
+.PHONY: build test test-scripts sync-check parity generate app icon bump-version release clean
 
 DERIVED_DATA ?= .dd
 # Debug build for local runs and CI: ad-hoc identity, universal binary.
@@ -30,8 +30,17 @@ app: generate
 	xcodebuild -scheme Handbyte -configuration Debug -destination 'platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) build $(XCODEBUILD_FLAGS)
 
-# Signed Release archive, DMG and Sparkle appcast under dist/.
-# Pass VERSION=X.Y.Z to override MARKETING_VERSION from project.yml.
+# Redraw the app icon set from scripts/render-app-icon.swift.
+icon:
+	swift scripts/render-app-icon.swift App/Resources/Assets.xcassets/AppIcon.appiconset
+
+# Set MARKETING_VERSION and the next build number: make bump-version VERSION=0.2.0 [BUILD=N]
+bump-version:
+	@test -n "$(VERSION)" || { echo "usage: make bump-version VERSION=X.Y.Z [BUILD=N]" >&2; exit 2; }
+	scripts/bump-version.sh $(VERSION) $(BUILD)
+
+# Signed Release archive, notarized DMG and Sparkle appcast under dist/.
+# VERSION=X.Y.Z asserts that project.yml carries that version (CI passes the tag).
 release:
 	DERIVED_DATA=$(DERIVED_DATA) scripts/release.sh $(if $(VERSION),--version $(VERSION))
 
