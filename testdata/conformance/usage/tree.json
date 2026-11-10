@@ -1,0 +1,27 @@
+{
+  "name": "sizes add up, a hard link counts once and a symbolic link is not followed",
+  "files": [
+    {"path": "docs/a.txt", "bytes": 1000},
+    {"path": "docs/deep/b.txt", "bytes": 2000},
+    {"path": "media/movie.mov", "bytes": 50000},
+    {"path": "media/song.mp3", "bytes": 7000},
+    {"path": "top.bin", "bytes": 300}
+  ],
+  "hardLinks": [
+    {"path": "media/copy.mov", "target": "media/movie.mov"}
+  ],
+  "symlinks": [
+    {"path": "shortcut", "target": "media"}
+  ],
+  "expect": {
+    "files": 6,
+    "logicalBytes": 60305,
+    "children": [
+      {"name": "media", "dir": true, "files": 2, "logicalBytes": 57000},
+      {"name": "docs", "dir": true, "files": 2, "logicalBytes": 3000},
+      {"name": "top.bin", "dir": false, "files": 1, "logicalBytes": 300},
+      {"name": "shortcut", "dir": false, "files": 1, "logicalBytes": 5}
+    ],
+    "largestFiles": ["media/copy.mov", "media/song.mp3", "docs/deep/b.txt"]
+  }
+}
