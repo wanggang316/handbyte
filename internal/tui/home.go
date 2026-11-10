@@ -36,6 +36,8 @@ type HomeInfo struct {
 	Now        time.Time
 	// Home is the last Analyze result of the home folder, if any.
 	Home *usage.Summary
+	// FirstRun shows the three lines that explain the tool.
+	FirstRun bool
 }
 
 type homeEntry struct {
@@ -225,7 +227,10 @@ func (m *Home) View() string {
 	}
 
 	e := homeEntries[m.cursor]
-	if roomy && size != Narrow {
+	if m.info.FirstRun && roomy && size != Narrow {
+		body = append(body, "")
+		body = append(body, hintBox("How handbyte works", firstRunLines, inner, pad)...)
+	} else if roomy && size != Narrow {
 		body = append(body, "")
 		body = append(body, hintBox(e.name, e.hint, inner, pad)...)
 	} else if f.Status == "" {
@@ -263,6 +268,14 @@ func (m *Home) volumeParts() []CategoryShare {
 		parts = append(parts, CategoryShare{"other", "System and other", rest})
 	}
 	return parts
+}
+
+// firstRunLines explain the tool once: what Smart Clean takes, what goes to
+// the Trash, and how to undo.
+var firstRunLines = []string{
+	"Clean takes only safe items: caches, logs and build output that apps make again by themselves.",
+	"Those are removed, so the space is free at once. Apps, backups and other data go to the Trash.",
+	"Each action is recorded: handbyte history lists them, handbyte restore <id> puts items back.",
 }
 
 // hintBox explains the highlighted entry in a rounded box.

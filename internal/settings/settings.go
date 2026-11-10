@@ -15,6 +15,11 @@ type Config struct {
 	Version    int      `json:"version"`
 	Roots      []string `json:"roots,omitempty"`
 	Exclusions []string `json:"exclusions,omitempty"`
+	// NoMouse turns off mouse support in the full-screen views, for users
+	// who select terminal text with the mouse.
+	NoMouse bool `json:"no_mouse,omitempty"`
+	// IntroShown is set after the three lines of the first run.
+	IntroShown bool `json:"intro_shown,omitempty"`
 }
 
 func Dir() (string, error) {

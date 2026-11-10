@@ -267,3 +267,29 @@ func TestAnalyzeKeepsTheResultAndShowsItDuringTheNextScan(t *testing.T) {
 		t.Fatalf("a cancelled scan must not replace the summary: %+v", s)
 	}
 }
+
+func TestAnalyzeMouseSelectsAndOpensARow(t *testing.T) {
+	m, _ := scannedAnalyze(t, 110, 28)
+	m.View()
+	click := func(y int) {
+		m.Update(tea.MouseMsg{X: 10, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	}
+	click(m.listTop + 2)
+	if m.levels[0].cursor != 2 {
+		t.Fatalf("a click must move the cursor: %d", m.levels[0].cursor)
+	}
+	m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	if m.levels[0].cursor != 3 {
+		t.Fatalf("the wheel must move the cursor: %d", m.levels[0].cursor)
+	}
+	m.levels[0].cursor = 0
+	m.View()
+	click(m.listTop)
+	if len(m.levels) != 2 {
+		t.Fatal("a click on the current folder must open it")
+	}
+	click(0)
+	if len(m.levels) != 2 {
+		t.Fatal("a click outside the list must do nothing")
+	}
+}

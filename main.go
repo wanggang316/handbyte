@@ -47,6 +47,7 @@ Usage:
   handbyte config             Show the project roots and the protected paths
   handbyte config roots <paths>      Save the project roots (comma-separated)
   handbyte config protect <path>     Protect a path from cleanup
+  handbyte config mouse on|off       Mouse support in the full-screen views
   handbyte config unprotect <path>   Remove that protection
   handbyte version            Print the version
 
@@ -286,6 +287,18 @@ func cmdClean(args []string) error {
 	if !interactive() {
 		return smartPlain(os.Stdout, opts)
 	}
+	if !saved.IntroShown {
+		for _, line := range []string{
+			"Smart Clean takes only safe items: caches, logs and build output that apps make again.",
+			"Those are removed, so the space is free at once. Everything else goes to the Trash.",
+			"handbyte history lists each action; handbyte restore <id> puts Trash items back.",
+		} {
+			fmt.Println("  " + tui.Meta.Render(line))
+		}
+		fmt.Println()
+		saved.IntroShown = true
+		_ = settings.Save(saved)
+	}
 	next, err := tui.RunSmart(opts)
 	if err != nil {
 		return err
@@ -401,6 +414,7 @@ func analyzeOptions() tui.AnalyzeOptions {
 	opts := tui.AnalyzeOptions{
 		Hints:      scanner.NewHints(home, saved.Roots),
 		Categories: catalog.LoadStorage().Paths(home, roots),
+		Mouse:      !saved.NoMouse,
 	}
 	if dir, err := settings.Dir(); err == nil {
 		opts.SummaryFile = filepath.Join(dir, "usage.json")
@@ -508,7 +522,9 @@ func cmdApps(args []string, open string) error {
 	}
 	fast := opts
 	fast.SkipSizes = true
+	saved, _ := settings.Load()
 	return tui.RunApps(tui.AppsOptions{
+		Mouse:     !saved.NoMouse,
 		Home:      home,
 		Open:      open,
 		WithData:  *withData,
@@ -739,8 +755,15 @@ func cmdConfig(args []string) error {
 		return nil
 	case (args[0] == "protect" || args[0] == "unprotect") && len(args) == 2:
 		return setProtection(saved, args[1], args[0] == "protect")
+	case args[0] == "mouse" && len(args) == 2 && (args[1] == "on" || args[1] == "off"):
+		saved.NoMouse = args[1] == "off"
+		if err := settings.Save(saved); err != nil {
+			return err
+		}
+		fmt.Println("Mouse support " + args[1])
+		return nil
 	}
-	return usageError{"usage: handbyte config [roots <paths> | protect <path> | unprotect <path>]"}
+	return usageError{"usage: handbyte config [roots <paths> | protect <path> | unprotect <path> | mouse on|off]"}
 }
 
 func printConfig(w io.Writer, saved settings.Config) {
@@ -752,6 +775,11 @@ func printConfig(w io.Writer, saved settings.Config) {
 	for _, r := range roots {
 		fmt.Fprintf(w, "  %s%s\n", r, note)
 	}
+	mouse := "on"
+	if saved.NoMouse {
+		mouse = "off"
+	}
+	fmt.Fprintln(w, "\nMouse support\n  "+mouse)
 	fmt.Fprintln(w, "\nProtected paths")
 	if len(saved.Exclusions) == 0 {
 		fmt.Fprintln(w, "  none")
@@ -863,7 +891,13 @@ func runHome() error {
 				}
 			}
 		}
+		saved, _ := settings.Load()
+		info.FirstRun = !saved.IntroShown
 		action, err := tui.RunHome(info)
+		if info.FirstRun {
+			saved.IntroShown = true
+			_ = settings.Save(saved)
+		}
 		if err != nil {
 			return err
 		}

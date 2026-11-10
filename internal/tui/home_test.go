@@ -113,3 +113,15 @@ func TestHomeShowsTheCategoriesOfTheLastAnalyze(t *testing.T) {
 	}
 	assertFits(t, out, 110, 28)
 }
+
+func TestFirstRunShowsTheThreeLines(t *testing.T) {
+	m := testHome(110, 30)
+	m.info.FirstRun = true
+	out := m.View()
+	for _, want := range []string{"How handbyte works", "only safe items", "go to the Trash", "handbyte restore"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q is missing:\n%s", want, out)
+		}
+	}
+	assertFits(t, out, 110, 30)
+}

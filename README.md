@@ -94,6 +94,7 @@ handbyte config                    # Show project roots and protected paths
 handbyte config roots ~/work       # Save project roots
 handbyte config protect ~/work/keep     # Save a protected path
 handbyte config unprotect ~/work/keep   # Remove that exact protection
+handbyte config mouse off          # No mouse in the full-screen views
 handbyte help                      # All commands and options
 ```
 

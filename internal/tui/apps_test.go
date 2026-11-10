@@ -146,3 +146,17 @@ func TestUninstallReviewRefusesSystemHomebrewAndRunningApps(t *testing.T) {
 		t.Fatal("R must offer the files of a Homebrew app without the app")
 	}
 }
+
+func TestAppsMouseSelectsARow(t *testing.T) {
+	var plans []cleaner.AppPlan
+	m := fakeApps(t, &plans)
+	m.View()
+	m.Update(tea.MouseMsg{Y: m.listTop + 1, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	if m.cursor != 1 || m.review != nil {
+		t.Fatalf("cursor %d", m.cursor)
+	}
+	m.Update(tea.MouseMsg{Y: m.listTop + 1, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	if m.review == nil {
+		t.Fatal("a click on the current app must open its review")
+	}
+}

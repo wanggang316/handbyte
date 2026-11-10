@@ -30,6 +30,8 @@ type AppsOptions struct {
 	Open string
 	// WithData selects the app's data at start.
 	WithData bool
+	// Mouse turns on clicks and the scroll wheel.
+	Mouse bool
 }
 
 type appsTab int
@@ -91,6 +93,8 @@ type Apps struct {
 	result      *uninstallDoneMsg
 	resultTitle string
 	opened      bool
+	// listTop and listOffset place the visible list on the screen.
+	listTop, listOffset int
 }
 
 type appsReview struct {
@@ -180,6 +184,23 @@ func (m *Apps) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.review = nil
 	case tea.KeyMsg:
 		return m.key(msg)
+	case tea.MouseMsg:
+		if m.review != nil || m.result != nil || m.loading {
+			return m, nil
+		}
+		switch {
+		case msg.Button == tea.MouseButtonWheelUp:
+			m.cursor = max(0, m.cursor-1)
+		case msg.Button == tea.MouseButtonWheelDown:
+			m.cursor = min(m.rowCount()-1, m.cursor+1)
+		case msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress:
+			if row, ok := MouseRow(msg.Y, m.listTop, m.listOffset, m.rowCount()); ok {
+				if row == m.cursor {
+					return m.key(tea.KeyMsg{Type: tea.KeyEnter})
+				}
+				m.cursor = row
+			}
+		}
 	}
 	return m, nil
 }
@@ -459,6 +480,7 @@ func (m *Apps) viewList(f *Frame, pad string, inner int) {
 	now := m.opts.Now()
 	if m.tab == tabLeftovers {
 		offset := max(0, min(m.cursor-height/2, len(m.leftovers)-height))
+		m.listTop, m.listOffset = HeaderLines(m.height)+len(body), offset
 		for i := offset; i < len(m.leftovers) && i < offset+height; i++ {
 			g := m.leftovers[i]
 			marker, style := "  ", Normal
@@ -481,6 +503,7 @@ func (m *Apps) viewList(f *Frame, pad string, inner int) {
 	} else {
 		v := m.visible()
 		offset := max(0, min(m.cursor-height/2, len(v)-height))
+		m.listTop, m.listOffset = HeaderLines(m.height)+len(body), offset
 		for i := offset; i < len(v) && i < offset+height; i++ {
 			a := m.list[v[i]]
 			marker, style := "  ", Normal
@@ -657,6 +680,10 @@ func (m *Apps) viewResult(f *Frame, pad string, inner int) {
 
 // RunApps shows the app list until the user leaves it.
 func RunApps(opts AppsOptions) error {
-	_, err := tea.NewProgram(NewApps(opts), tea.WithAltScreen()).Run()
+	options := []tea.ProgramOption{tea.WithAltScreen()}
+	if opts.Mouse {
+		options = append(options, tea.WithMouseCellMotion())
+	}
+	_, err := tea.NewProgram(NewApps(opts), options...).Run()
 	return err
 }

@@ -150,3 +150,21 @@ func (f Frame) keyBar(width int) string {
 	}
 	return ansi.Truncate(bar, width, "…")
 }
+
+// HeaderLines is the number of screen lines above the body of a frame.
+func HeaderLines(height int) int {
+	if height >= compactHeight {
+		return 2
+	}
+	return 1
+}
+
+// MouseRow maps a mouse event to a list row: the list starts on screen row
+// top and shows the rows from offset on. It returns false outside the list.
+func MouseRow(y, top, offset, rows int) (int, bool) {
+	row := y - top + offset
+	if y < top || row < offset || row >= rows {
+		return 0, false
+	}
+	return row, true
+}

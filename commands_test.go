@@ -93,6 +93,15 @@ func TestCommandsCoverTheOldFlags(t *testing.T) {
 	if r := run("config"); strings.Contains(r.stdout, "example/target") {
 		t.Fatalf("the protection must be gone: %+v", r)
 	}
+	if r := run("config", "mouse", "off"); r.code != 0 {
+		t.Fatalf("config mouse off: %+v", r)
+	}
+	if r := run("config"); !strings.Contains(r.stdout, "Mouse support\n  off") {
+		t.Fatalf("config must show the mouse setting: %+v", r)
+	}
+	if r := run("config", "mouse", "maybe"); r.code != 2 {
+		t.Fatalf("a bad mouse value: %+v", r)
+	}
 
 	if r := run("history", "--json"); strings.TrimSpace(r.stdout) != "[]" {
 		t.Fatalf("history --json: %+v", r)

@@ -63,6 +63,9 @@ type Analyze struct {
 	// categories of the finished scan, largest first.
 	categories []CategoryShare
 	collect    collector
+	// listTop and listOffset place the visible list on the screen, for
+	// the mouse.
+	listTop, listOffset int
 }
 
 // AnalyzeOptions connects the drill-down to the catalog and the cache.
@@ -76,6 +79,8 @@ type AnalyzeOptions struct {
 	// Collect moves picked items to the Trash. Tests replace it; nil uses
 	// cleaner.Collect with the Finder.
 	Collect func(context.Context, []cleaner.Collected) []cleaner.Result
+	// Mouse turns on clicks and the scroll wheel.
+	Mouse bool
 }
 
 // NewAnalyze returns the drill-down for a path.
@@ -159,6 +164,38 @@ func (m *Analyze) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.collect.stage = collectDone
 	case tea.KeyMsg:
 		return m.key(msg.String())
+	case tea.MouseMsg:
+		return m.mouse(msg)
+	}
+	return m, nil
+}
+
+// mouse scrolls with the wheel; a click puts the cursor on a row, and a
+// click on the current row opens it.
+func (m *Analyze) mouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if m.scanning || m.result == nil || m.help || m.collect.stage != collectOff {
+		return m, nil
+	}
+	switch {
+	case msg.Button == tea.MouseButtonWheelUp:
+		return m.key("up")
+	case msg.Button == tea.MouseButtonWheelDown:
+		return m.key("down")
+	case msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress:
+		count := len(m.result.Largest)
+		cursor := &m.fileCursor
+		if !m.files {
+			current := &m.levels[len(m.levels)-1]
+			count, cursor = len(m.rows(current.node)), &current.cursor
+		}
+		row, ok := MouseRow(msg.Y, m.listTop, m.listOffset, count)
+		if !ok {
+			return m, nil
+		}
+		if row == *cursor {
+			return m.key("enter")
+		}
+		*cursor = row
 	}
 	return m, nil
 }
@@ -476,6 +513,7 @@ func (m *Analyze) viewTree(f *Frame) {
 
 	height := max(1, m.listHeight()-len(body))
 	offset := max(0, min(current.cursor-height/2, len(rows)-height))
+	m.listTop, m.listOffset = HeaderLines(m.height)+len(body), offset
 	var largest int64
 	for _, r := range rows {
 		largest = max(largest, r.allocated)
@@ -648,6 +686,7 @@ func (m *Analyze) viewFiles(f *Frame) {
 	body := []string{pad + Title.Render(CutMiddle(tilde(m.result.Path), max(8, inner-30))) + Meta.Render(fmt.Sprintf("  the %d largest files", len(files))), ""}
 	height := max(1, m.listHeight()-2)
 	offset := max(0, min(m.fileCursor-height/2, len(files)-height))
+	m.listTop, m.listOffset = HeaderLines(m.height)+len(body), offset
 	for i := offset; i < len(files) && i < offset+height; i++ {
 		rel, err := filepath.Rel(m.result.Path, files[i].Path)
 		if err != nil {
@@ -690,6 +729,10 @@ func since(d time.Duration) string {
 
 // RunAnalyze shows the drill-down for a path until the user leaves it.
 func RunAnalyze(path string, opts AnalyzeOptions) error {
-	_, err := tea.NewProgram(NewAnalyze(path, opts), tea.WithAltScreen()).Run()
+	options := []tea.ProgramOption{tea.WithAltScreen()}
+	if opts.Mouse {
+		options = append(options, tea.WithMouseCellMotion())
+	}
+	_, err := tea.NewProgram(NewAnalyze(path, opts), options...).Run()
 	return err
 }
