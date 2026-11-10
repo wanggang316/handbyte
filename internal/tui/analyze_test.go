@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/wanggang316/handbyte/internal/scanner"
 	"github.com/wanggang316/handbyte/internal/usage"
 )
 
@@ -41,7 +42,7 @@ func scannedAnalyze(t *testing.T, width, height int) (*Analyze, *[]string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := NewAnalyze(root)
+	m := NewAnalyze(root, scanner.NewHints(root, nil))
 	var shown []string
 	m.reveal = func(path string) error { shown = append(shown, path); return nil }
 	m.scanning = true
@@ -154,7 +155,7 @@ func TestAnalyzeNavigation(t *testing.T) {
 }
 
 func TestAnalyzeScanningScreenShowsRunningTotals(t *testing.T) {
-	m := NewAnalyze("/tmp/example")
+	m := NewAnalyze("/tmp/example", scanner.Hints{})
 	m.scanning = true
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.Update(analyzeProgressMsg(usage.Progress{Files: 12345, Allocated: 3 << 30, Current: "/tmp/example/b/deep", Top: []usage.TopProgress{
@@ -190,5 +191,43 @@ func TestAnalyzeHelpListsTheKeysThatANarrowBarHides(t *testing.T) {
 	analyzeKey(m, "x")
 	if strings.Contains(m.View(), "KEYS") {
 		t.Fatal("a key must close the help")
+	}
+}
+
+func TestAnalyzeMarksFoldersThatACleanupRuleCovers(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{"Library/Caches/go-build/00/a", "Documents/a"} {
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, make([]byte, 8192), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := usage.Scan(context.Background(), root, usage.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewAnalyze(root, scanner.NewHints(result.Path, nil))
+	m.scanning = true
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.Update(analyzeDoneMsg{result: result})
+	for _, name := range []string{"Library", "Caches"} {
+		for i, r := range m.rows(m.levels[len(m.levels)-1].node) {
+			if r.node.Name == name {
+				m.levels[len(m.levels)-1].cursor = i
+			}
+		}
+		analyzeKey(m, "enter")
+	}
+	out := m.View()
+	if !strings.Contains(out, "go-build/") || !strings.Contains(out, "●") || !strings.Contains(out, "Cleanable") || !strings.Contains(out, "handbyte clean") {
+		t.Fatalf("go-build must be marked as cleanable:\n%s", out)
+	}
+	analyzeKey(m, "left")
+	analyzeKey(m, "left")
+	if strings.Contains(m.View(), "Cleanable") {
+		t.Fatalf("the home folder itself is not covered:\n%s", m.View())
 	}
 }

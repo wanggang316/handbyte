@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/wanggang316/handbyte/internal/scanner"
 	"github.com/wanggang316/handbyte/internal/usage"
 )
 
@@ -53,11 +54,21 @@ type Analyze struct {
 
 	// reveal shows a path in Finder. Tests replace it.
 	reveal func(path string) error
+	// hints marks the folders that a cleanup rule covers.
+	hints scanner.Hints
 }
 
 // NewAnalyze returns the drill-down for a path.
-func NewAnalyze(path string) *Analyze {
-	return &Analyze{path: path, reveal: func(p string) error { return exec.Command("open", "-R", p).Run() }}
+func NewAnalyze(path string, hints scanner.Hints) *Analyze {
+	return &Analyze{path: path, hints: hints, reveal: func(p string) error { return exec.Command("open", "-R", p).Run() }}
+}
+
+// rule returns the cleanup rule that covers a row of the opened folder.
+func (m *Analyze) rule(r analyzeRow) (scanner.Preset, bool) {
+	if r.node == nil || !r.node.Dir {
+		return scanner.Preset{}, false
+	}
+	return m.hints.Rule(filepath.Join(m.currentPath(), r.node.Name))
 }
 
 func (m *Analyze) Init() tea.Cmd { return m.start() }
@@ -479,6 +490,9 @@ func (m *Analyze) treeRow(r analyzeRow, parent, largest int64, width int, curren
 	if r.node != nil && r.node.Incomplete && r.node.Skipped == "" {
 		line += Review.Render(" !")
 	}
+	if _, ok := m.rule(r); ok {
+		line += Safe.Render(" ●")
+	}
 	return line
 }
 
@@ -502,6 +516,13 @@ func (m *Analyze) detail(r analyzeRow, parent *usage.Node, width int) []string {
 	}
 	if parent.Allocated > 0 {
 		lines = append(lines, Meta.Render("Share       ")+Normal.Render(fmt.Sprintf("%.1f%% of this folder", float64(n.Allocated)/float64(parent.Allocated)*100)))
+	}
+	if rule, ok := m.rule(r); ok {
+		lines = append(lines, "", Safe.Render("● Cleanable"))
+		for _, part := range strings.Split(ansi.Wordwrap(rule.Description, width, ""), "\n") {
+			lines = append(lines, Meta.Render(part))
+		}
+		lines = append(lines, Meta.Render("Review it: ")+Normal.Render("handbyte clean"))
 	}
 	switch {
 	case n.Skipped != "":
@@ -544,7 +565,7 @@ func (m *Analyze) viewFiles(f *Frame) {
 }
 
 // RunAnalyze shows the drill-down for a path until the user leaves it.
-func RunAnalyze(path string) error {
-	_, err := tea.NewProgram(NewAnalyze(path), tea.WithAltScreen()).Run()
+func RunAnalyze(path string, hints scanner.Hints) error {
+	_, err := tea.NewProgram(NewAnalyze(path, hints), tea.WithAltScreen()).Run()
 	return err
 }

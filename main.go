@@ -250,7 +250,12 @@ func cmdAnalyze(args []string) error {
 	if *asJSON {
 		return printUsage(path)
 	}
-	return tui.RunAnalyze(path)
+	saved, err := settings.Load()
+	if err != nil {
+		return err
+	}
+	home, _ := os.UserHomeDir()
+	return tui.RunAnalyze(path, scanner.NewHints(home, saved.Roots))
 }
 
 // printUsage scans a folder with the storage engine and prints the first
