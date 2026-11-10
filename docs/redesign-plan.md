@@ -365,7 +365,7 @@ obeys `NO_COLOR`. Without color, glyphs and brackets carry all states.
   right for the focused item, action bar.
 - A command palette on ⌘K lists sections and actions. The keys match the CLI
   where a match exists (`/` filter, Space select, ⌘R rescan).
-- The system frame stays native (window, toolbar, sidebar material). Custom
+- The system frame stays native (window, toolbar, materials). Custom
   tokens apply to the content, so that the app fits the macOS release it runs
   on.
 
@@ -454,7 +454,7 @@ Each step is usable alone and ships in both products.
 
 1. **Foundation**: catalog and conformance fixtures; the design tokens in both
    products; the CLI command set with the home screen and the responsive
-   frame; the app shell with the sidebar and the Overview. No new cleanup
+   frame; the app shell with the top bar and the Overview. No new cleanup
    behavior.
 2. **Storage**: the scan engine, the volume overview, the drill-down, largest
    files, the collector, the links into Clean.
