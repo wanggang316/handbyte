@@ -495,11 +495,13 @@ func printUsage(path string) error {
 		Files     int64  `json:"file_count"`
 		Status    string `json:"status"`
 		Note      string `json:"note,omitempty"`
+		MayShare  bool   `json:"may_share,omitempty"`
 	}
 	type file struct {
 		Path      string `json:"path"`
 		Allocated int64  `json:"allocated_bytes"`
 		Logical   int64  `json:"logical_bytes"`
+		MayShare  bool   `json:"may_share,omitempty"`
 	}
 	status := func(n *usage.Node) string {
 		switch {
@@ -531,10 +533,10 @@ func printUsage(path string) error {
 		if note == "" {
 			note = n.Err
 		}
-		report.Children = append(report.Children, child{n.Name, n.Dir, n.Allocated, n.Logical, n.Files, status(n), note})
+		report.Children = append(report.Children, child{n.Name, n.Dir, n.Allocated, n.Logical, n.Files, status(n), note, n.MayShare})
 	}
 	for _, f := range result.Largest {
-		report.Largest = append(report.Largest, file{f.Path, f.Allocated, f.Logical})
+		report.Largest = append(report.Largest, file{f.Path, f.Allocated, f.Logical, f.MayShare})
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
