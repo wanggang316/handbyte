@@ -1,8 +1,9 @@
 # Redesign plan: clean, apps and storage for the CLI and the macOS app
 
-Status: design agreed, 2026-11-10, revision 4. Step 1 (Foundation) is
+Status: design agreed, 2026-11-10, revision 4. Steps 1 to 5 are
 implemented on the branch `refactor/new-version` of both repositories; see
-"Progress". The section "Decisions" lists what was decided.
+"Progress" for what is done and what is not. The section "Decisions" lists
+what was decided.
 Revision 2 added one-step cleaning, the waiting states, a lighter visual
 direction and the logo. Revision 3 records the decisions, adds the system
 areas to Clean, describes the removal modes and changes the logo.
@@ -584,6 +585,61 @@ Step 2, Storage, 2026-11-10 (first part):
   that shape the design"). Until then a clone counts in full, as `du` does.
   Next: a probe on macOS 14 and 27 that checks `ATTR_CMNEXT_CLONEID` and
   `ATTR_CMNEXT_PRIVATESIZE` from the bulk call, then the Swift engine first.
+
+Step 3, Clean, 2026-11-10:
+
+- Catalog version 2: areas, the data class (`rebuildable`), owner processes
+  and owner names, `*` wildcards for browser profiles, and 50 more rules
+  (browsers for each profile, developer tools, VS Code and Electron app
+  caches, Xcode documentation and device logs, crash reports, device
+  firmware, iOS backups, Mail downloads). A preset location that holds the
+  location of a more specific rule is not reported. Every preset has a
+  positive fixture test; every safe rule names its owner processes.
+- Smart Clean in both products: area lines while scanning, the safe total,
+  what needs review and what is skipped with the reason, one confirmation,
+  the result with the change of free space. The CLI form is a stream in the
+  scrollback; `--yes`, `--review`, `--deep`, `--trash`, `--rm`, `--dry-run`.
+  Choose items starts with the safe items selected.
+- Removal by data class: rebuildable data is removed, all other data goes to
+  the Trash. "Always use the Trash" and `--trash` keep the old behavior.
+- History with Restore in the app.
+- System rules (`catalog/system.json`): system crash reports older than 30
+  days and rotated system logs older than 7 days, as fixed `find` commands.
+  The CLI runs them with `sudo` (`handbyte clean --system`), the app after
+  the administrator dialog. Not done: `/Library/Caches`, update files and
+  the unified log store; they need more than an age and a name pattern.
+
+Step 4, Apps, 2026-11-10:
+
+- Inventory in both products: bundle ID, version, source (App Store,
+  Homebrew with the cask zap paths, Setapp, direct), running state, last use
+  from Spotlight ("unknown" is not "never"), architectures, size.
+- File matching by `catalog/apps.json`, with shared conformance cases: a
+  bundle ID at a dot boundary is high, the app name or a cask zap path is
+  medium, a dot folder is low; a name that belongs more exactly to another
+  installed app is not taken; `com.apple.*` is never offered. Caches, logs
+  and state are selected, settings for a high match, data only on request.
+- Uninstall and reset (keep the app, remove its files). Apps of macOS,
+  running apps and apps from Homebrew are refused with the reason; for
+  Homebrew the screen names `brew uninstall --cask`. The CLI journals an
+  uninstall as one group for `handbyte restore <group>`.
+- Leftovers: folders (and `.plist` files in Preferences) named by a bundle
+  ID whose vendor, vendor word and app name match no installed app, without
+  UUIDs and shared libraries. Review only, nothing selected.
+- Not done: background items and system extensions of an app, signing
+  team, items in `/Library` that need admin rights, `brew uninstall` run by
+  the tool itself.
+
+Step 5, Finish, 2026-11-10:
+
+- App: command palette (⌘K), ⌘1 to ⌘5 for the sections, ⌘R for Clean Now,
+  a first-run note on the Overview.
+- CLI: three first-run lines on the home screen and before Smart Clean;
+  mouse support (wheel, click, a second click opens) in the drill-down and
+  the apps list, `handbyte config mouse off`.
+- Accessibility: every button of the app has a label (checked with the
+  accessibility API). Not done: a full VoiceOver pass and a Reduce Motion
+  pass.
 
 Not done in step 1: the terminal screens were checked by tests at 58x20,
 80x24, 110x28 and 160x45 without color, and by one run in a pseudo terminal;
