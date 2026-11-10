@@ -459,10 +459,10 @@ func (m *Analyze) viewScanning(f *Frame) {
 			body = append(body, pad+Between(Safe.Render(spinner[m.frame%len(spinner)]+" ")+Title.Render(name), Title.Render(Bytes(t.Allocated)+"+"), inner))
 		default:
 			// Until the folder is measured, its size of the last run stands
-			// in, in a faint tone, so that the list is not empty.
+			// in, in the dim tone, so that the list is not empty.
 			was := ""
 			if size, ok := lastSize[t.Name]; ok {
-				was = Faint.Render(Bytes(size))
+				was = Meta.Render(Bytes(size))
 			}
 			body = append(body, pad+Between(Meta.Render("· "+name), was, inner))
 		}

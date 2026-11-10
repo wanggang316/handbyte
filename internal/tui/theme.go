@@ -11,14 +11,16 @@ import (
 )
 
 // The palette is ink and one green. Each color has a light and a dark
-// variant, so that dim text stays readable on a light terminal.
+// variant, so that dim text stays readable on a light terminal. Text colors
+// keep 4.5:1 on white, Solarized light, black and grey (theme_test.go);
+// Faint is for tracks and rules only.
 var (
 	ColorInk    = lipgloss.AdaptiveColor{Light: "#111214", Dark: "#F4F4F5"}
 	ColorText   = lipgloss.AdaptiveColor{Light: "#2B2D31", Dark: "#D6D8DD"}
-	ColorDim    = lipgloss.AdaptiveColor{Light: "#62666D", Dark: "#7F838C"}
+	ColorDim    = lipgloss.AdaptiveColor{Light: "#62666D", Dark: "#888C95"}
 	ColorFaint  = lipgloss.AdaptiveColor{Light: "#C4C6CB", Dark: "#3A3C43"}
-	ColorGreen  = lipgloss.AdaptiveColor{Light: "#0E9F5B", Dark: "#3DDC97"}
-	ColorAmber  = lipgloss.AdaptiveColor{Light: "#A86400", Dark: "#F2B04C"}
+	ColorGreen  = lipgloss.AdaptiveColor{Light: "#0B7A50", Dark: "#3DDC97"}
+	ColorAmber  = lipgloss.AdaptiveColor{Light: "#955800", Dark: "#F2B04C"}
 	ColorRed    = lipgloss.AdaptiveColor{Light: "#C0293B", Dark: "#FF8A94"}
 	ColorBand   = lipgloss.AdaptiveColor{Light: "#ECEDEF", Dark: "#27292E"}
 	ColorKey    = lipgloss.AdaptiveColor{Light: "#E4E5E8", Dark: "#2C2E34"}
