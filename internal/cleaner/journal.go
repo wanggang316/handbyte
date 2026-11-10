@@ -15,6 +15,9 @@ import (
 	"github.com/wanggang316/handbyte/internal/settings"
 )
 
+// journalPath is the journal that the CLI and the app share:
+// ~/Library/Application Support/handbyte/actions.jsonl. Each line is one
+// Result as JSON; the last line of an ID is its present state.
 func journalPath() (string, error) {
 	dir, err := settings.Dir()
 	if err != nil {
@@ -54,6 +57,9 @@ func appendJournal(result Result) error {
 		if last[0] != '\n' {
 			return errors.New("journal has an unterminated record")
 		}
+	}
+	if result.Tool == "" {
+		result.Tool = "cli"
 	}
 	data, err := json.Marshal(result)
 	if err != nil {

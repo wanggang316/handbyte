@@ -28,7 +28,8 @@ func (m Mode) Action(it scanner.Item) string {
 	return "trash"
 }
 
-// Result is the outcome of cleaning one path.
+// Result is the outcome of cleaning one path. It is also the record of the
+// journal that the CLI and the app share; see journalPath.
 type Result struct {
 	ID            string
 	Destination   string
@@ -47,6 +48,10 @@ type Result struct {
 	// Group joins the actions of one uninstall, so that one restore puts
 	// all of them back.
 	Group string `json:",omitempty"`
+	// Rule is the catalog rule, "collected" or "app:<bundle ID>".
+	Rule string `json:",omitempty"`
+	// Tool is the product that wrote the record: "cli" or "app".
+	Tool string `json:",omitempty"`
 }
 
 // CanRestore reports whether the recorded outcome supports an in-app restore.

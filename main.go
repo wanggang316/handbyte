@@ -772,9 +772,16 @@ func printHistory(w io.Writer, results []cleaner.Result) {
 		if when.IsZero() {
 			when = r.StartedAt
 		}
-		fmt.Fprintf(w, "%s  %-10s %10s  %s\n    id %s\n", when.Local().Format("2006-01-02 15:04"), r.Status, tui.Bytes(r.Moved+r.Freed+r.Previewed), path, r.ID)
+		fmt.Fprintf(w, "%s  %-10s %10s  %s\n    id %s", when.Local().Format("2006-01-02 15:04"), r.Status, tui.Bytes(r.Moved+r.Freed+r.Previewed), path, r.ID)
+		if r.Group != "" {
+			fmt.Fprintf(w, " · group %s", r.Group)
+		}
+		if r.Tool == "app" {
+			fmt.Fprint(w, " · by the app")
+		}
+		fmt.Fprintln(w)
 	}
-	fmt.Fprintln(w, "\nPut an item back from the Trash: handbyte restore <id>")
+	fmt.Fprintln(w, "\nPut an item back from the Trash: handbyte restore <id>, or <group> for all items of one uninstall")
 }
 
 func cmdRestore(args []string) error {

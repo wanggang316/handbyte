@@ -35,7 +35,7 @@ func Execute(ctx context.Context, items []scanner.Item, opts Options, progress c
 	results := make([]Result, 0, len(items))
 	journalFailure := ""
 	for _, it := range items {
-		r := Result{ID: rand.Text(), Path: it.Path, StartedAt: time.Now()}
+		r := Result{ID: rand.Text(), Path: it.Path, Rule: it.Source, StartedAt: time.Now()}
 		emit := func(done bool) {
 			if progress == nil {
 				return

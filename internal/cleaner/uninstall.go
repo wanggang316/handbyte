@@ -131,7 +131,7 @@ func Uninstall(ctx context.Context, p AppPlan, opts AppOptions) (string, []Resul
 		return appendJournal(r)
 	}
 	move := func(path string, size int64, recheck func() error) (Result, error) {
-		r := Result{ID: rand.Text(), Path: path, StartedAt: time.Now()}
+		r := Result{ID: rand.Text(), Path: path, Rule: "app:" + p.BundleID, StartedAt: time.Now()}
 		if err := ctx.Err(); err != nil {
 			r.Status, r.Err = "cancelled", err
 			return r, err

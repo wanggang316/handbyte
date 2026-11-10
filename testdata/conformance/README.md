@@ -73,3 +73,25 @@ word; a name that belongs more exactly to another installed app is not
 taken; `com.apple.*` is never offered. A leftover is a folder (or, in Preferences, a `.plist` file) named by a bundle ID whose vendor (the first two parts, `com.example`) has no installed app, none of whose parts is the vendor name (`example`) or the name of an installed app, that holds no UUID and that is not a shared library or updater of the ignore list. Caches, logs and state are selected,
 settings are selected for a bundle ID match, data only with `withData`, and
 a low match never.
+
+## journal
+
+The CLI and the app write one journal:
+`~/Library/Application Support/handbyte/actions.jsonl`. Each line is one
+JSON record; the last line of an ID is the present state of that action. A
+case gives journal lines from both products and the state that each
+product must read.
+
+| Field | Meaning |
+| --- | --- |
+| `lines` | Journal lines, oldest first |
+| `expect` | One entry for each ID, in the order of its first line: the last `status`, the `outcome` that the app shows (`moved`, `removed`, `failed`, `restored`, or `none` for an action that changed nothing), whether a restore is possible, the `group` and the bytes moved or freed |
+
+Keys: `ID`, `Path`, `Status` (`started`, `trashed`, `removed`, `failed`,
+`skipped`, `previewed`, `cancelled`, `restoring`, `restored`),
+`Destination` (the Trash place), `TrashIdentity` (`Device` and `Inode` of
+the Trash item; a restore needs it), `Moved` and `Freed` (bytes), `Message`,
+`StartedAt` and `EndedAt` (RFC 3339), `Group` (one uninstall), `Rule` and
+`Tool` (`cli` or `app`). A reader ignores keys it does not know. A writer
+appends one complete line and refuses to write after a line without its
+newline.

@@ -136,7 +136,7 @@ func Collect(ctx context.Context, items []Collected, opts CollectOptions, progre
 	journalFailure := ""
 	seen := map[string]bool{}
 	for _, c := range items {
-		r := Result{ID: rand.Text(), Path: c.Path, StartedAt: time.Now()}
+		r := Result{ID: rand.Text(), Path: c.Path, Rule: "collected", StartedAt: time.Now()}
 		inside := false
 		for _, other := range items {
 			if other.Path != c.Path && scanner.Contains(other.Path, c.Path) {
