@@ -61,13 +61,20 @@ jobs:
           fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Validate changelog
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: python3 scripts/release-notes.py "$TAG" > /dev/null
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Test
-        run: go test ./...
+        run: |
+          python3 -B -m unittest discover -s scripts -p 'test_*.py'
+          go test ./...
 
   build:
     needs: verify
@@ -119,6 +126,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -146,10 +157,12 @@ jobs:
           TAG: ${{ needs.verify.outputs.tag }}
         run: |
           set -euo pipefail
+          python3 scripts/release-notes.py "$TAG" > "$RUNNER_TEMP/release-notes.md"
           if DRAFT=$(gh release view "$TAG" --json isDraft --jq .isDraft); then
             [[ "$DRAFT" == true ]] || { echo '::error::Release is already published; refusing to replace assets'; exit 1; }
+            gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
           else
-            gh release create "$TAG" --verify-tag --draft --title "$TAG" --generate-notes
+            gh release create "$TAG" --verify-tag --draft --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
           fi
           gh release upload "$TAG" dist/* --clobber
           # Verify the uploaded bytes before making the release public.
