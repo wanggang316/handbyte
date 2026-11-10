@@ -181,9 +181,9 @@ On macOS, `config.json` and `actions.jsonl` live in
 `roots` and `exclusions`. An unreadable or invalid config stops cleanup; it is
 never treated as an empty protection list. Excluding a child also protects its
 ancestors from deletion. To remove a protection inherited from a parent, remove
-that exact parent path with `--unprotect`.
+that exact parent path with `handbyte config unprotect`.
 
-`--scan-only` keeps the existing `free_bytes` and `items` fields and adds
+`handbyte clean --json` keeps the existing `free_bytes` and `items` fields and adds
 `schema_version: 2`, `scan_status`, and `warnings`. Item fields now include owner,
 project, identity, eligibility, reason, activity and scan coverage. The old
 numeric `Safety` field remains for compatibility; use `Eligibility` for cleanup
