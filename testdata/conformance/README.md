@@ -28,8 +28,9 @@ storage engine and compares the result.
 | --- | --- |
 | `files` | Files to make, as paths relative to the root, each with a size in bytes |
 | `hardLinks` | Extra names for a file of `files` |
+| `clones` | APFS clones of a file of `files`, made with `clonefile`. A case with clones is skipped on a volume that cannot clone. |
 | `symlinks` | Symbolic links, with the target relative to the root |
-| `expect.files`, `expect.logicalBytes` | Totals of the root. A file with several names counts once. When the names are in one directory, the name that sorts first carries the size. A symbolic link counts as one file with the length of its target text. |
+| `expect.files`, `expect.logicalBytes` | Totals of the root. A file with several names counts once. When the names are in one directory, the name that sorts first carries the size. A full clone counts as a file with its logical size, but its allocated size counts once; in one directory, the name that sorts first carries it. A symbolic link counts as one file with the length of its target text. |
 | `expect.children` | The direct children of the root, largest first |
 | `expect.largestFiles` | The largest files of the tree, largest first, as paths relative to the root |
 

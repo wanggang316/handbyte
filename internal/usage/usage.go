@@ -35,6 +35,10 @@ type Node struct {
 	// Incomplete is true when this directory, or one below it, could not be
 	// read in full. The sizes are then a lower bound.
 	Incomplete bool
+	// MayShare is true when this file, or one below this directory, is a
+	// partial APFS clone. It counts in full, so the sizes can be larger than
+	// the space that a deletion frees.
+	MayShare bool
 	// Skipped says why a directory was not entered: another volume, or
 	// content that is not on this Mac.
 	Skipped string
@@ -46,6 +50,7 @@ type File struct {
 	Path      string
 	Allocated int64
 	Logical   int64
+	MayShare  bool
 }
 
 // Progress is a snapshot of a running scan.
@@ -106,6 +111,7 @@ type scan struct {
 
 	mu      sync.Mutex
 	links   map[identity]bool
+	clones  map[identity]bool
 	largest fileHeap
 }
 
@@ -136,7 +142,7 @@ func Scan(ctx context.Context, path string, opts Options) (*Result, error) {
 	if opts.FilesPerDir <= 0 {
 		opts.FilesPerDir = 50
 	}
-	s := &scan{ctx: ctx, opts: opts, devices: map[uint64]bool{}, slots: make(chan struct{}, opts.Workers), links: map[identity]bool{}}
+	s := &scan{ctx: ctx, opts: opts, devices: map[uint64]bool{}, slots: make(chan struct{}, opts.Workers), links: map[identity]bool{}, clones: map[identity]bool{}}
 	s.current.Store(root)
 	if st, ok := info.Sys().(*syscall.Stat_t); ok {
 		s.devices[uint64(st.Dev)] = true
@@ -206,36 +212,11 @@ type top struct {
 	done      atomic.Bool
 }
 
-type entry struct {
-	name string
-	info os.FileInfo
-	st   *syscall.Stat_t
-}
-
-// read lists a directory in name order. It returns the entries it could
-// read and the first error.
-func read(dir string) ([]entry, error) {
-	list, err := os.ReadDir(dir)
-	entries := make([]entry, 0, len(list))
-	for _, d := range list {
-		info, ierr := d.Info()
-		if ierr != nil {
-			if err == nil && !os.IsNotExist(ierr) {
-				err = ierr
-			}
-			continue
-		}
-		st, _ := info.Sys().(*syscall.Stat_t)
-		entries = append(entries, entry{d.Name(), info, st})
-	}
-	return entries, err
-}
-
 func (s *scan) readTop(root string) []*top {
 	entries, _ := read(root)
 	tops := make([]*top, len(entries))
 	for i, e := range entries {
-		tops[i] = &top{name: e.name, dir: e.info.IsDir()}
+		tops[i] = &top{name: e.name, dir: e.dir}
 	}
 	return tops
 }
@@ -289,7 +270,7 @@ func (s *scan) walkInto(path string, node *Node, bucket func(string) *top, total
 		if bucket != nil {
 			t = bucket(e.name)
 		}
-		child := &Node{Name: e.name, Dir: e.info.IsDir()}
+		child := &Node{Name: e.name, Dir: e.dir}
 		full := filepath.Join(path, e.name)
 		if !child.Dir {
 			s.measureFile(full, e, child, t)
@@ -305,9 +286,9 @@ func (s *scan) walkInto(path string, node *Node, bucket func(string) *top, total
 		switch {
 		case full == s.skipPath:
 			child.Skipped = "other volumes"
-		case e.st != nil && !s.devices[uint64(e.st.Dev)]:
+		case !s.devices[e.dev]:
 			child.Skipped = "another volume"
-		case e.st != nil && e.st.Flags&sfDataless != 0:
+		case e.flags&sfDataless != 0:
 			child.Skipped = "not on this Mac"
 		}
 		if child.Skipped != "" {
@@ -343,12 +324,14 @@ func (s *scan) walkInto(path string, node *Node, bucket func(string) *top, total
 		node.Logical += c.Logical
 		node.Files += c.Files
 		node.Incomplete = node.Incomplete || c.Incomplete
+		node.MayShare = node.MayShare || c.MayShare
 	}
 	sort.SliceStable(files, func(i, j int) bool { return larger(files[i], files[j]) })
 	for i, f := range files {
 		node.Allocated += f.Allocated
 		node.Logical += f.Logical
 		node.Files++
+		node.MayShare = node.MayShare || f.MayShare
 		if i < s.opts.FilesPerDir {
 			node.Children = append(node.Children, f)
 		} else {
@@ -370,10 +353,12 @@ func larger(a, b *Node) bool {
 }
 
 // measureFile counts one entry that is not a directory. A file with more
-// than one name counts once for the scan.
+// than one name counts once for the scan. Full APFS clones share all their
+// blocks, so the space counts once for each clone ID; the other clones count
+// with no allocated size.
 func (s *scan) measureFile(full string, e entry, node *Node, total *top) {
-	if e.st != nil && e.st.Nlink > 1 && e.info.Mode().IsRegular() {
-		id := identity{uint64(e.st.Dev), uint64(e.st.Ino)}
+	if e.links > 1 && e.regular {
+		id := identity{e.dev, e.ino}
 		s.mu.Lock()
 		seen := s.links[id]
 		s.links[id] = true
@@ -383,23 +368,35 @@ func (s *scan) measureFile(full string, e entry, node *Node, total *top) {
 		}
 	}
 	node.Files = 1
-	node.Logical = e.info.Size()
-	if e.st != nil {
-		node.Allocated = int64(e.st.Blocks) * 512
+	node.Logical = e.logical
+	node.Allocated = e.allocated
+	if node.Allocated > 0 && e.regular {
+		if e.clone.full {
+			id := identity{e.dev, e.clone.id}
+			s.mu.Lock()
+			seen := s.clones[id]
+			s.clones[id] = true
+			s.mu.Unlock()
+			if seen {
+				node.Allocated = 0
+			}
+		} else if e.clone.partial {
+			node.MayShare = true
+		}
 	}
 	s.files.Add(1)
 	s.allocated.Add(node.Allocated)
 	if total != nil {
 		total.allocated.Add(node.Allocated)
 	}
-	if !e.info.Mode().IsRegular() {
+	if !e.regular {
 		return
 	}
 	s.mu.Lock()
 	if len(s.largest) < s.opts.LargestFiles {
-		heap.Push(&s.largest, File{full, node.Allocated, node.Logical})
+		heap.Push(&s.largest, File{full, node.Allocated, node.Logical, node.MayShare})
 	} else if smallest := s.largest[0]; node.Allocated > smallest.Allocated || (node.Allocated == smallest.Allocated && node.Logical > smallest.Logical) {
-		s.largest[0] = File{full, node.Allocated, node.Logical}
+		s.largest[0] = File{full, node.Allocated, node.Logical, node.MayShare}
 		heap.Fix(&s.largest, 0)
 	}
 	s.mu.Unlock()

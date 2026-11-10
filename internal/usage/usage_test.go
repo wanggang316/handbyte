@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ type usageCase struct {
 		Bytes int    `json:"bytes"`
 	} `json:"files"`
 	HardLinks []struct{ Path, Target string } `json:"hardLinks"`
+	Clones    []struct{ Path, Target string } `json:"clones"`
 	Symlinks  []struct{ Path, Target string } `json:"symlinks"`
 	Expect    struct {
 		Files        int64 `json:"files"`
@@ -39,6 +41,21 @@ func write(t *testing.T, root, rel string, size int) {
 	}
 	if err := os.WriteFile(full, make([]byte, size), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// clone makes an APFS clone. It skips the test when the volume cannot.
+func clone(t *testing.T, src, dst string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("cp", "-c", src, dst).CombinedOutput()
+	if err != nil && strings.Contains(string(out), "not supported") {
+		t.Skipf("cannot clone on this volume: %s", out)
+	}
+	if err != nil {
+		t.Fatalf("clone: %v %s", err, out)
 	}
 }
 
@@ -68,6 +85,9 @@ func TestUsageConformance(t *testing.T) {
 				if err := os.Link(filepath.Join(root, l.Target), filepath.Join(root, l.Path)); err != nil {
 					t.Fatal(err)
 				}
+			}
+			for _, l := range c.Clones {
+				clone(t, filepath.Join(root, l.Target), filepath.Join(root, l.Path))
 			}
 			for _, l := range c.Symlinks {
 				if err := os.Symlink(l.Target, filepath.Join(root, l.Path)); err != nil {
@@ -116,20 +136,11 @@ func TestUnreadableDirectoryMarksTheParentChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	find := func(n *Node, name string) *Node {
-		for _, c := range n.Children {
-			if c.Name == name {
-				return c
-			}
-		}
-		t.Fatalf("%s is missing", name)
-		return nil
-	}
-	outer := find(r.Root, "outer")
-	if !r.Root.Incomplete || !outer.Incomplete || !find(outer, "locked").Incomplete || find(outer, "locked").Err == "" {
+	outer := find(t, r.Root, "outer")
+	if !r.Root.Incomplete || !outer.Incomplete || !find(t, outer, "locked").Incomplete || find(t, outer, "locked").Err == "" {
 		t.Fatalf("the unreadable directory must mark its parents: root %+v outer %+v", *r.Root, *outer)
 	}
-	if find(r.Root, "ok").Incomplete || r.Root.Files != 1 {
+	if find(t, r.Root, "ok").Incomplete || r.Root.Files != 1 {
 		t.Fatalf("a readable sibling must stay complete: %+v", *r.Root)
 	}
 }
@@ -205,5 +216,99 @@ func TestScanRejectsAFile(t *testing.T) {
 	write(t, root, "file", 10)
 	if _, err := Scan(context.Background(), filepath.Join(root, "file"), Options{}); err == nil {
 		t.Fatal("a file is not a tree")
+	}
+}
+
+func find(t *testing.T, n *Node, name string) *Node {
+	t.Helper()
+	for _, c := range n.Children {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("%s is missing", name)
+	return nil
+}
+
+func TestFullClonesCountOnce(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "a/original", 100_000)
+	clone(t, filepath.Join(root, "a/original"), filepath.Join(root, "a/copy"))
+	clone(t, filepath.Join(root, "a/original"), filepath.Join(root, "b/copy"))
+	single, err := Scan(context.Background(), filepath.Join(root, "a"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := Scan(context.Background(), root, Options{Workers: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	size := find(t, single.Root, "original").Allocated + find(t, single.Root, "copy").Allocated
+	if size == 0 || r.Root.Allocated != size || r.Root.Files != 3 || r.Root.Logical != 300_000 || r.Root.MayShare {
+		t.Fatalf("three full clones must count once: allocated %d, want %d; %+v", r.Root.Allocated, size, *r.Root)
+	}
+	// In one directory, the name that sorts first carries the size.
+	if find(t, single.Root, "copy").Allocated != size || find(t, single.Root, "original").Allocated != 0 {
+		t.Fatalf("copy must carry the size: %+v", single.Root.Children)
+	}
+}
+
+func TestPartialClonesCountInFullAndMayShare(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "original", 100_000)
+	clone(t, filepath.Join(root, "original"), filepath.Join(root, "dir/changed"))
+	f, err := os.OpenFile(filepath.Join(root, "dir/changed"), os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt([]byte("changed"), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Scan(context.Background(), root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, original := find(t, r.Root, "dir"), find(t, r.Root, "original")
+	changed := find(t, dir, "changed")
+	if original.Allocated == 0 || changed.Allocated == 0 || r.Root.Allocated != original.Allocated+changed.Allocated {
+		t.Fatalf("partial clones must count in full: %+v", r.Root.Children)
+	}
+	if !changed.MayShare || !original.MayShare || !dir.MayShare || !r.Root.MayShare {
+		t.Fatalf("partial clones and their parents must have the mark: %+v", r.Root.Children)
+	}
+	for _, l := range r.Largest {
+		if !l.MayShare {
+			t.Fatalf("largest file without the mark: %+v", l)
+		}
+	}
+}
+
+func TestPlainFilesHaveNoMark(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "a/x", 5000)
+	r, err := Scan(context.Background(), root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Root.MayShare || find(t, r.Root, "a").MayShare {
+		t.Fatalf("a plain file must not have the mark: %+v", *r.Root)
+	}
+}
+
+func TestCloneStateWithoutReferenceCount(t *testing.T) {
+	data := make([]byte, 16)
+	data[8] = efMayShareBlocks | efSharesAllBlocks
+	if c := parseClone(attrCmnExtCloneID|attrCmnExtExtFlags, data); !c.full || c.partial {
+		t.Fatalf("a file that shares all blocks is a full clone: %+v", c)
+	}
+	data[8] = efMayShareBlocks
+	if c := parseClone(attrCmnExtCloneID|attrCmnExtExtFlags, data); c.full || !c.partial {
+		t.Fatalf("a file that may share blocks is a partial clone: %+v", c)
+	}
+	if c := parseClone(0, data); c.full || c.partial {
+		t.Fatalf("no attributes, no clone: %+v", c)
 	}
 }
