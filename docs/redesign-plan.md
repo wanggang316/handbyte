@@ -1,7 +1,8 @@
 # Redesign plan: clean, apps and storage for the CLI and the macOS app
 
-Status: design agreed, 2026-11-10, revision 4. Implementation has not
-started. The section "Decisions" lists what was decided.
+Status: design agreed, 2026-11-10, revision 4. Step 1 (Foundation) is
+implemented on the branch `refactor/new-version` of both repositories; see
+"Progress". The section "Decisions" lists what was decided.
 Revision 2 added one-step cleaning, the waiting states, a lighter visual
 direction and the logo. Revision 3 records the decisions, adds the system
 areas to Clean, describes the removal modes and changes the logo.
@@ -534,6 +535,31 @@ Each step is usable alone and ships in both products.
    then uninstall and reset, then leftovers.
 5. **Finish**: the command palette, the first-run guide, mouse support in the
    terminal, an accessibility review.
+
+### Progress
+
+Step 1, Foundation, 2026-11-10:
+
+- Shared catalog `catalog/cleanup.json` with validation, embedded in the CLI
+  and copied into the app. A golden test fixes the rule set.
+- Conformance cases in `testdata/conformance/cleanup`, run by `go test` and
+  by `swift test`. One difference is recorded in `SYNC.md` of the app: the
+  CLI needs a project marker for build output, the app does not.
+- CLI: the commands `clean`, `analyze`, `history`, `restore`, `config`,
+  `help` and `version`; the home screen; the frame with the three widths.
+  `clean` opens the present review screen. The stream form, `apps` and
+  `uninstall` come with their steps.
+- App: design tokens and controls, the toolbar with the section tabs, the
+  Overview. Clean is the present flow. Apps, Storage and History show a
+  description.
+- Logo B1 in the app icon, the favicon, the website header and the terminal.
+
+Not done in step 1: the terminal screens were checked by tests at 58x20,
+80x24, 110x28 and 160x45 without color, and by one run in a pseudo terminal;
+a light terminal theme was not checked. The app was checked by screenshots of
+the Overview, a planned section and the Clean start screen in the light
+appearance; the dark appearance, Reduce Motion and keyboard-only use were
+not checked.
 
 Acceptance for each step: the conformance fixtures pass in both products;
 terminal screens are checked at 58x20, 80x24, 110x28 and 160x45 in a dark and
