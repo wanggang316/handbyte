@@ -1,7 +1,7 @@
 # Redesign plan: clean, apps and storage for the CLI and the macOS app
 
-Status: proposal, 2026-11-10, revision 3. Not approved. The section
-"Decisions" lists what is decided and what is open.
+Status: design agreed, 2026-11-10, revision 4. Implementation has not
+started. The section "Decisions" lists what was decided.
 Revision 2 added one-step cleaning, the waiting states, a lighter visual
 direction and the logo. Revision 3 records the decisions, adds the system
 areas to Clean, describes the removal modes and changes the logo.
@@ -481,7 +481,7 @@ The first drawing had a small byte that went over the outline of the block,
 which is the shape of an unread badge. Its round bite also did not fit the
 square byte. The canvas shows the drawings that correct this:
 
-- **B1, Fitted cut** (recommended): the cut is a square with a small inner
+- **B1, Fitted cut** (chosen): the cut is a square with a small inner
   radius, at an equal distance from the byte on both sides. On a 64 grid:
   byte 19 with radius 6.5, gap 4.5, inner radius 11. The two parts together
   make the full rounded square.
@@ -500,7 +500,7 @@ and two capsule bars (before and after).
   tracking.
 - Terminal: two cells, `▙▝`, then the name in bold.
 
-After the choice, redraw `scripts/render-app-icon.swift`, the favicon and the
+In the Foundation step, redraw `scripts/render-app-icon.swift`, the favicon and the
 website header.
 
 ## Architecture
@@ -552,12 +552,10 @@ Decided on 2026-11-10:
   rights.
 - **Storage view in the app.** Treemap with a side list.
 - **Sequence.** Storage before Clean and Apps.
-- **Logo direction.** "Bite", with a larger bite and byte.
+- **Logo.** "Bite", drawing B1 (fitted cut).
 - **Removal mode.** By data class, as in "Removal mode": direct removal for
   rebuildable items, the Trash for all other items, `--trash` as the option.
 - **Admin rights.** One-time authorization in both products. No installed
   helper in the first release.
 
-Open:
-
-1. **Logo drawing.** Proposed: B1. Alternatives: B2, A1.
+No decision is open.
