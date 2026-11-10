@@ -118,7 +118,7 @@ what stays ("5.2 GB more needs review") and links to "Choose items".
 
 #### Removal mode
 
-Open, see "Decisions". What Mole `28e68bd` does:
+Decided: by data class. What Mole `28e68bd` does:
 
 - `mo clean` has no confirmation and no selection. It asks only for the
   administrator password, then scans and deletes section by section. It
@@ -478,18 +478,25 @@ part, and the rest is free. The logo is the product's own progress bar. The
 first three directions (Bite, letter h, Trim) were set aside as too
 abstract; the canvas keeps them small for comparison.
 
-The canvas shows three drawings of the direction:
+The first drawings (D1 to D3) were too heavy: the bars filled the icon, and
+black touched a bright green. The canvas now shows three lighter drawings:
 
-- **D1, Quiet**: pale tracks, the bottom fill is green. The lightest. At
-  16 px the tracks fade and the two fills can look like lines of text.
-- **D2, Freed** (recommended): the free part of the bottom bar is green. Ink
-  is used space, green is the space that came back. Both bars keep their
-  full shape at 16 px.
-- **D3, Outline**: outlined tracks. Clear when large, not clear at 16 px.
+- **E1, Balanced** (recommended): medium bars on pale tracks. The mark
+  fills about two thirds of the icon. One color for each bar: the top fill
+  is ink, the bottom fill is green.
+- **E2, Light**: thinner and smaller bars, and all colors move a little to
+  green. The lightest. Small in the Dock.
+- **E3, Bare**: no tracks, one long ink capsule and one short green capsule.
+  The clearest at 16 px, but it shows "long and short", not "full and free".
+
+Colors for E1 and E3: ink `#1b1d1c`, paper `#f6f6f3`, green `#2fb47c` on
+light and `#6fdcab` on dark. If this green is chosen, the `brand` token of
+the design system changes to it.
 
 Rules for all drawings:
 
-- Colors: ink and one green. No gradient.
+- Colors: soft ink, off-white paper and one green of low saturation. No
+  gradient. No two strong colors touch.
 - App icon: the mark in white and green on an ink squircle. A light variant
   is in the canvas.
 - Wordmark: the mark, then "handbyte" in lower case, weight 650, tight
@@ -550,14 +557,11 @@ Decided on 2026-11-10:
 - **Storage view in the app.** Treemap with a side list.
 - **Sequence.** Storage before Clean and Apps.
 - **Logo direction.** Two capsule bars. Directions A to C are set aside.
+- **Removal mode.** By data class, as in "Removal mode": direct removal for
+  rebuildable items, the Trash for all other items, `--trash` as the option.
+- **Admin rights.** One-time authorization in both products. No installed
+  helper in the first release.
 
 Open:
 
-1. **Removal mode.** Proposed: by data class, as in "Removal mode". Direct
-   removal for rebuildable items, the Trash for all other items, `--trash`
-   as the option. Alternative: the Trash for all items, as today; then one
-   step frees no space until the Trash is emptied.
-2. **Admin rights.** Proposed: one-time authorization in both products, no
-   installed helper. Alternatives: no rights (list only), or a privileged
-   helper.
-3. **Logo drawing.** Proposed: D2. Alternatives: D1, D3.
+1. **Logo drawing.** Proposed: E1. Alternatives: E2, E3.
