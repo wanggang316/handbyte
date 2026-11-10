@@ -70,28 +70,37 @@ sudo rm "$(command -v handbyte)"
 ## Usage
 
 ```sh
-handbyte                         # Review candidates in the terminal
-handbyte --dry-run               # Preview; no cleanup actions
-handbyte --scope=quick           # Known caches and Xcode data
-handbyte --scope=projects        # Project artifacts only
-handbyte --explore=~/Downloads   # Read-only directory explorer
-handbyte --min=200M              # Minimum candidate size
-handbyte --roots=~/work          # Override project roots for this scan
-handbyte --roots=~/work --save-roots
-handbyte --no-projects           # Skip project artifact discovery
-handbyte --protect=~/work/keep    # Save a protected path
-handbyte --unprotect=~/work/keep  # Remove that exact protection
-handbyte --scan-only             # JSON inventory with coverage and eligibility
-handbyte --history               # Local action records as JSON
-handbyte --restore=ACTION_ID     # Restore a recorded Trash action
-handbyte --rm                    # Explicit permanent deletion mode
+handbyte                           # Home screen: Clean, Analyze, History
+handbyte clean                     # Review candidates in the terminal
+handbyte clean --dry-run           # Preview; no cleanup actions
+handbyte clean --scope=quick       # Known caches and Xcode data
+handbyte clean --scope=projects    # Project artifacts only
+handbyte clean --min=200M          # Minimum candidate size
+handbyte clean --roots=~/work      # Override project roots for this scan
+handbyte clean --no-projects       # Skip project artifact discovery
+handbyte clean --json              # JSON inventory with coverage and eligibility
+handbyte clean --rm                # Explicit permanent deletion mode
+handbyte analyze ~/Downloads       # Read-only directory explorer
+handbyte history                   # Local action records (--json for JSON)
+handbyte restore ACTION_ID         # Restore a recorded Trash action
+handbyte config                    # Show project roots and protected paths
+handbyte config roots ~/work       # Save project roots
+handbyte config protect ~/work/keep     # Save a protected path
+handbyte config unprotect ~/work/keep   # Remove that exact protection
+handbyte help                      # All commands and options
 ```
 
-The start screen offers Quick cleanup, Project cleanup, and Explore storage.
+The home screen adapts to the terminal width and explains each entry. The
+review screen offers Quick cleanup, Project cleanup, and Explore storage.
 No items start selected. The default scan retains the existing `all` scope;
-`--roots` overrides saved roots without changing them unless `--save-roots` is
-also supplied. Default project roots are `~/dev`, `~/Projects`, `~/Code`, and
+`--roots` overrides saved roots for one scan, and `handbyte config roots`
+saves them. Default project roots are `~/dev`, `~/Projects`, `~/Code`, and
 `~/workspace`.
+
+The options of earlier releases without a command (`handbyte --dry-run`,
+`--scan-only`, `--explore`, `--history`, `--restore`, `--protect`,
+`--unprotect`, `--save-roots`) still work in this release. Each one prints
+the command that replaces it.
 
 ## Review controls
 
