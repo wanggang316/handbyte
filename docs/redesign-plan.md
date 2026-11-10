@@ -55,9 +55,8 @@ their code or rule tables.
 
 - `getattrlistbulk` returns allocated size, link count and, with
   `FSOPT_ATTR_CMN_EXTENDED`, the clone ID, extended flags and private size.
-  *Not verified*: that the bulk call returns the clone attributes on every
-  supported macOS version. DaisyDisk states that clone detection needs
-  macOS 14.
+  Verified on macOS 27 (see Step 2, "Clones"). *Not verified*: macOS 14.
+  DaisyDisk states that clone detection needs macOS 14.
 - `ATTR_CMNEXT_PRIVATESIZE` is the number of bytes that a deletion frees
   immediately. Use it for "frees now" in confirmations.
 - A scan from `/` must not also enter `/System/Volumes/Data`. Firmlinks cause
@@ -579,12 +578,30 @@ Step 2, Storage, 2026-11-10 (first part):
   a cleanup rule covers points to Clean. Each move is journaled; the CLI can
   restore it.
 - The app Overview names the purgeable part of the free space.
-- Deferred: `getattrlistbulk` and counting APFS clones once. The Go standard
-  library and `x/sys/unix` have no wrapper for the call, and the clone
-  attributes are not verified on the supported macOS versions (see "Facts
-  that shape the design"). Until then a clone counts in full, as `du` does.
-  Next: a probe on macOS 14 and 27 that checks `ATTR_CMNEXT_CLONEID` and
-  `ATTR_CMNEXT_PRIVATESIZE` from the bulk call, then the Swift engine first.
+- Clones, 2026-11-10: both engines read each directory with one
+  `getattrlistbulk` loop. Mount points, firmlinks and entries with an error
+  still use `lstat`, because the bulk call gives the values of the
+  directory below a mount point. Go calls it through `syscall` (no cgo).
+  A file is a full clone when `ATTR_CMNEXT_CLONE_REFCNT` is more than 1
+  (without that attribute: `EF_SHARES_ALL_BLOCKS`). Its allocated size
+  counts once for each `(device, clone ID)`; in one directory the name that
+  sorts first carries it. A file with `EF_MAY_SHARE_BLOCKS` that is not a
+  full clone counts in full and has the "may share" mark (`MayShare`, also
+  on its parents and in `analyze --json`). A conformance case checks a full
+  clone; unit tests check a partial clone.
+  Probe on macOS 27 (APFS, `cp -c`): full clones have the same clone ID,
+  private size 0, flags `0x41` and a reference count equal to the number of
+  clones. A clone that was changed gets a new clone ID, a private size
+  larger than 0, flags `0x1` and a reference count of 1. The source of a
+  clone that was changed also has flags `0x1`. Hard links of a clone have
+  the same clone ID and do not change the count. On `/opt/homebrew`,
+  119,000 of 133,000 files are full clones. The scan is faster than with
+  `readdir` and `lstat` (Go: about 0.65 s to 0.5 s; Swift release build:
+  0.58 s to 0.49 s).
+  *Not verified*: macOS 14 (no test Mac). If it does not give the reference
+  count, the flag is used; if it gives neither, a clone counts in full, as
+  `du` does. A full clone that also shares blocks with a third file has no
+  mark, because the flags cannot show it.
 
 Step 3, Clean, 2026-11-10:
 
