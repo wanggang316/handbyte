@@ -26,6 +26,7 @@ import (
 	"github.com/wanggang316/handbyte/internal/cleaner"
 	"github.com/wanggang316/handbyte/internal/scanner"
 	"github.com/wanggang316/handbyte/internal/settings"
+	"github.com/wanggang316/handbyte/internal/system"
 	"github.com/wanggang316/handbyte/internal/tui"
 	"github.com/wanggang316/handbyte/internal/ui"
 	"github.com/wanggang316/handbyte/internal/usage"
@@ -58,6 +59,7 @@ Options of clean:
   --dry-run        Preview only; change nothing
   --trash          Move everything to the Trash, also caches
   --rm             Delete everything directly, not through the Trash
+  --system         Old system logs and crash reports; asks for your password
   --scope=<s>      With --review: all, quick or projects (default all)
   --min=<size>     Drop items smaller than this, for example 200M (default 50M)
   --roots=<paths>  Project roots for this scan only
@@ -237,6 +239,7 @@ func cmdClean(args []string) error {
 	review := fs.Bool("review", false, "")
 	deep := fs.Bool("deep", false, "")
 	yes := fs.Bool("yes", false, "")
+	systemFiles := fs.Bool("system", false, "")
 	positional, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -263,6 +266,9 @@ func cmdClean(args []string) error {
 		mode = cleaner.ModeByData
 	}
 	free, _ := freeBytes("/")
+	if *systemFiles {
+		return cleanSystem(*dryRun, *yes)
+	}
 	if *review || *deep {
 		if *deep {
 			cfg.Scope, cfg.SkipProjectScan = "all", false
@@ -283,6 +289,13 @@ func cmdClean(args []string) error {
 			return cleaner.Execute(ctx, items, cleaner.Options{Mode: mode, Exclusions: smart.Exclusions}, progress)
 		},
 		FreeBytes: func() int64 { n, _ := freeBytes("/"); return n },
+		SystemBytes: func() int64 {
+			var total int64
+			for _, r := range catalog.LoadSystem().Rules {
+				total += system.MeasureRule(r, "", time.Now()).Bytes
+			}
+			return total
+		},
 	}
 	if !interactive() {
 		return smartPlain(os.Stdout, opts)
@@ -311,6 +324,49 @@ func cmdClean(args []string) error {
 		return ui.RunReview(cfg, mode, free)
 	}
 	return nil
+}
+
+// cleanSystem removes the old files of the system rules. They belong to
+// root, so the command runs through sudo, which asks for the password once.
+func cleanSystem(dryRun, yes bool) error {
+	var rules []catalog.SystemRule
+	var total int64
+	for _, r := range catalog.LoadSystem().Rules {
+		m := system.MeasureRule(r, "", time.Now())
+		note := ""
+		if m.Partial {
+			note = "  (some folders could not be read; more may be removed)"
+		}
+		fmt.Printf("%-32s %6d files %10s%s\n", r.Title, m.Files, tui.Bytes(m.Bytes), note)
+		if m.Files > 0 || m.Partial {
+			rules = append(rules, r)
+		}
+		total += m.Bytes
+	}
+	if len(rules) == 0 {
+		fmt.Println("Nothing to clean.")
+		return nil
+	}
+	if dryRun {
+		fmt.Println("Preview only. Nothing was changed.")
+		return nil
+	}
+	if !yes {
+		if !interactive() {
+			fmt.Println("Nothing was changed. Run with --yes to clean; sudo must not need a password then.")
+			return nil
+		}
+		fmt.Printf("Remove %s of old system logs? macOS asks for your password. [y/N] ", tui.Bytes(total))
+		var answer string
+		fmt.Scanln(&answer)
+		if answer != "y" && answer != "Y" {
+			fmt.Println("Nothing was changed.")
+			return nil
+		}
+	}
+	removed, err := system.Clean(context.Background(), rules, !interactive())
+	fmt.Printf("Removed %d files.\n", removed)
+	return err
 }
 
 // smartPlain is Smart Clean without a terminal: it prints the summary and

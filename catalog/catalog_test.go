@@ -91,3 +91,20 @@ func TestEmbeddedAppCatalogIsValid(t *testing.T) {
 		}
 	}
 }
+
+func TestSystemRulesAreValidAndNarrow(t *testing.T) {
+	if _, err := ParseSystem(systemJSON); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{
+		"home root":    `{"version":1,"rules":[{"id":"a","title":"A","root":"/Users/x","names":["*.log"],"minAgeDays":1,"summary":"s","recovery":"r"}]}`,
+		"system root":  `{"version":1,"rules":[{"id":"a","title":"A","root":"/System/Library","names":["*.log"],"minAgeDays":1,"summary":"s","recovery":"r"}]}`,
+		"no age":       `{"version":1,"rules":[{"id":"a","title":"A","root":"/Library/Logs","names":["*.log"],"minAgeDays":0,"summary":"s","recovery":"r"}]}`,
+		"wide pattern": `{"version":1,"rules":[{"id":"a","title":"A","root":"/Library/Logs","names":["*"],"minAgeDays":1,"summary":"s","recovery":"r"}]}`,
+		"quote":        `{"version":1,"rules":[{"id":"a","title":"A","root":"/Library/Logs","names":["*.lo'g"],"minAgeDays":1,"summary":"s","recovery":"r"}]}`,
+	} {
+		if _, err := ParseSystem([]byte(data)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

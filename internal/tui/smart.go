@@ -37,6 +37,9 @@ type SmartOptions struct {
 	Yes bool
 	// FreeBytes reads the free space, before and after the clean.
 	FreeBytes func() int64
+	// SystemBytes measures the old system logs, which need the administrator
+	// password and are cleaned by handbyte clean --system.
+	SystemBytes func() int64
 }
 
 type smartPhase int
@@ -80,6 +83,7 @@ type Smart struct {
 
 	safe    []scanner.Item
 	results map[string]cleaner.Result
+	system  int64
 	cleaned int
 	before  int64
 	after   int64
@@ -149,6 +153,9 @@ func (m *Smart) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case smartScanDoneMsg:
 		m.elapsed = time.Since(m.started)
 		m.items, m.scanErr = msg.items, msg.err
+		if m.opts.SystemBytes != nil {
+			m.system = m.opts.SystemBytes()
+		}
 		m.safe = SmartSelection(m.items)
 		m.phase = smartReady
 		if len(m.safe) == 0 {
@@ -437,6 +444,9 @@ func (m *Smart) View() string {
 		}
 		if skipped > 0 {
 			line(Meta.Render("■ Skipped         " + fmt.Sprintf("%11s", Bytes(skipped)) + words("its app runs, or it is in use or protected")))
+		}
+		if m.system > 0 {
+			line(Meta.Render("◆ System logs     " + fmt.Sprintf("%11s", Bytes(m.system)) + words("need your password: handbyte clean --system")))
 		}
 		b.WriteString("\n")
 		if narrow {

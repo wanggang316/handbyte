@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "system-crash-reports",
+      "title": "System crash and hang reports",
+      "root": "/Library/Logs/DiagnosticReports",
+      "names": ["*.ips", "*.diag", "*.crash", "*.hang", "*.spin", "*.panic"],
+      "minAgeDays": 30,
+      "summary": "Crash, hang and resource reports of system processes, older than 30 days.",
+      "recovery": "Not rebuilt; only old reports are lost. New reports are written when a process fails."
+    },
+    {
+      "id": "system-log-archives",
+      "title": "Rotated system logs",
+      "root": "/private/var/log",
+      "names": ["*.gz", "*.bz2"],
+      "minAgeDays": 7,
+      "summary": "Compressed old parts of system logs, older than 7 days.",
+      "recovery": "Not rebuilt; the current logs stay. macOS rotates logs again on its own."
+    }
+  ]
+}

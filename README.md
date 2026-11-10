@@ -83,6 +83,7 @@ handbyte clean --roots=~/work      # Override project roots for this scan
 handbyte clean --no-projects       # Skip project artifact discovery
 handbyte clean --json              # JSON inventory with coverage and eligibility
 handbyte clean --rm                # Delete everything directly, not through the Trash
+handbyte clean --system            # Old system crash reports and rotated logs (asks for your password)
 handbyte analyze ~/Downloads       # Folders by size and the largest files (--json for JSON)
 handbyte apps                      # Apps by size and last use; uninstall; leftovers
 handbyte apps --unused --json      # Apps not opened for six months, as JSON
