@@ -114,3 +114,14 @@ func TestAppFilesMustBeInTheHomeFolder(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckAppRefusesAnAppWithASystemExtension(t *testing.T) {
+	err := CheckApp(AppPlan{Name: "Guard", Bundle: "/Applications/Guard.app", SystemExtension: true}, AppOptions{})
+	if err == nil || !strings.Contains(err.Error(), "system extension") {
+		t.Fatalf("err = %v", err)
+	}
+	// A reset keeps the app and its extension.
+	if err := CheckApp(AppPlan{Name: "Guard", SystemExtension: true}, AppOptions{}); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+}

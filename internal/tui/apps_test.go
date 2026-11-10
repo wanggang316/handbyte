@@ -25,7 +25,7 @@ func fakeApps(t *testing.T, plans *[]cleaner.AppPlan) *Apps {
 	m := NewApps(AppsOptions{
 		Inventory: func(context.Context) ([]apps.App, error) { return list, nil },
 		Known:     func([]apps.App) []string { return nil },
-		Related: func(a apps.App, _ []string, _ bool) []apps.Related {
+		Related: func(a apps.App, _ []apps.App, _ bool) []apps.Related {
 			return []apps.Related{
 				{Path: "/h/Library/Caches/" + a.BundleID, Class: "cache", Confidence: apps.High, Selected: true, Size: 20 << 20, IsDir: true},
 				{Path: "/h/Library/Application Support/" + a.BundleID, Class: "data", Confidence: apps.High, Selected: false, Size: 80 << 20, IsDir: true},

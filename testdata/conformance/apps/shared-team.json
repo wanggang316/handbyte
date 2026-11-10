@@ -1,0 +1,29 @@
+{
+  "name": "a group container of a team that another installed app shares is not offered",
+  "app": {
+    "bundleID": "com.example.Sync",
+    "name": "Sync Pro",
+    "zap": [],
+    "bundle": "/Applications/Sync Pro.app",
+    "team": "ABCDE12345"
+  },
+  "others": [
+    "com.example.Writer"
+  ],
+  "otherTeams": [
+    "ABCDE12345"
+  ],
+  "withData": true,
+  "files": [
+    "Library/Group Containers/ABCDE12345.suite/x",
+    "Library/Group Containers/ABCDE12345.com.example.Sync/x"
+  ],
+  "expect": [
+    {
+      "path": "Library/Group Containers/ABCDE12345.com.example.Sync",
+      "class": "data",
+      "confidence": "high",
+      "selected": true
+    }
+  ]
+}

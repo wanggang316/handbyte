@@ -22,7 +22,11 @@ type AppsOptions struct {
 	Inventory func(ctx context.Context) ([]apps.App, error)
 	Sizes     func(ctx context.Context, list []apps.App, done func(int, int64))
 	Known     func(list []apps.App) []string
-	Related   func(app apps.App, others []string, withData bool) []apps.Related
+	// Related returns the files of an app in the home folder; all is the
+	// inventory. System returns its files outside the home folder, which
+	// are listed only.
+	Related   func(app apps.App, all []apps.App, withData bool) []apps.Related
+	System    func(app apps.App, all []apps.App) []apps.Related
 	Leftovers func(known, names []string) []apps.LeftoverGroup
 	Uninstall func(ctx context.Context, plan cleaner.AppPlan) (string, []cleaner.Result, error)
 	Now       func() time.Time
@@ -70,6 +74,8 @@ type reviewFile struct {
 	selected bool
 	isDir    bool
 	bundle   bool
+	// locked files belong to root: listed, never selected.
+	locked bool
 }
 
 // Apps is the app list: facts, filters, uninstall and leftovers.
@@ -105,6 +111,7 @@ type appsReview struct {
 	cursor  int
 	refusal string
 	working bool
+	locked  int
 }
 
 // NewApps returns the apps screen.
@@ -238,30 +245,28 @@ func (m *Apps) visible() []int {
 	return out
 }
 
-func (m *Apps) others(a *apps.App) []string {
-	var out []string
-	for _, o := range m.list {
-		if o.Path != a.Path && o.BundleID != "" {
-			out = append(out, o.BundleID)
-		}
-	}
-	return out
-}
-
 func (m *Apps) openReview(a *apps.App, reset bool) {
 	r := &appsReview{app: a, reset: reset, title: a.Name}
 	if !reset {
 		r.files = append(r.files, reviewFile{path: a.Path, label: tilde(a.Path), class: "app", conf: "app", size: a.Size, selected: true, isDir: true, bundle: true})
 	}
-	related := m.opts.Related(*a, m.others(a), m.opts.WithData)
+	related := m.opts.Related(*a, m.list, m.opts.WithData)
 	for _, f := range related {
 		r.files = append(r.files, reviewFile{path: f.Path, label: tilde(f.Path), class: f.Class, conf: f.Confidence, size: f.Size, selected: f.Selected, isDir: f.IsDir})
+	}
+	if m.opts.System != nil {
+		for _, f := range m.opts.System(*a, m.list) {
+			r.files = append(r.files, reviewFile{path: f.Path, label: f.Path, class: f.Class, conf: "root", size: f.Size, isDir: f.IsDir, locked: true})
+			r.locked++
+		}
 	}
 	switch {
 	case a.System:
 		r.refusal = a.Name + " is part of macOS and cannot be uninstalled."
 	case a.Source == apps.SourceHomebrew && !reset:
-		r.refusal = "Installed with Homebrew. Run: brew uninstall --cask " + a.CaskToken + "   Press R to remove only its files."
+		r.refusal = "Installed with Homebrew. Run: handbyte uninstall --brew " + a.CaskToken + "   Press R to remove only its files."
+	case a.SystemExtension && !reset:
+		r.refusal = a.Name + " installs a system extension. Use its own uninstaller, or turn the extension off in System Settings first."
 	case a.Running && !reset:
 		r.refusal = a.Name + " is running. Quit it, then press r to check again."
 	}
@@ -364,7 +369,7 @@ func (m *Apps) reviewKey(key string) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		r.cursor = min(len(r.files)-1, r.cursor+1)
 	case " ":
-		if r.cursor < len(r.files) && !r.files[r.cursor].bundle {
+		if r.cursor < len(r.files) && !r.files[r.cursor].bundle && !r.files[r.cursor].locked {
 			r.files[r.cursor].selected = !r.files[r.cursor].selected
 		}
 	case "r":
@@ -581,6 +586,9 @@ func (m *Apps) appDetail(a apps.App, width int, now time.Time) []string {
 	if a.CaskToken != "" {
 		lines = append(lines, row("Cask", a.CaskToken))
 	}
+	if a.Team != "" {
+		lines = append(lines, row("Team", a.Team))
+	}
 	switch {
 	case a.System:
 		lines = append(lines, "", Meta.Render("◆ Part of macOS. Not offered."))
@@ -619,12 +627,18 @@ func (m *Apps) viewReview(f *Frame, pad string, inner int) {
 	if r.refusal != "" {
 		body = append(body, pad+Review.Render("! "+r.refusal), "")
 	}
+	if r.locked > 0 {
+		body = append(body, pad+Meta.Render(fmt.Sprintf("%d items marked [-] are outside your home folder and belong to root. Remove them in Finder.", r.locked)), "")
+	}
 	height := max(1, m.height-len(body)-6)
 	offset := max(0, min(r.cursor-height/2, len(r.files)-height))
 	for i := offset; i < len(r.files) && i < offset+height; i++ {
 		x := r.files[i]
 		box := "[ ]"
-		if x.selected {
+		switch {
+		case x.locked:
+			box = Meta.Render("[-]")
+		case x.selected:
 			box = Safe.Render("[x]")
 		}
 		marker, style := "  ", Normal

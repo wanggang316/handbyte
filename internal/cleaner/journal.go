@@ -3,6 +3,7 @@ package cleaner
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -186,4 +187,11 @@ func restoreOne(ctx context.Context, id string) error {
 		return appendJournal(r)
 	}
 	return errors.New("action ID not found")
+}
+
+// RecordRemoved journals a removal that another program made, such as
+// brew uninstall. It cannot be restored.
+func RecordRemoved(path, rule string, size int64) error {
+	now := time.Now()
+	return appendJournal(Result{ID: rand.Text(), Path: path, Rule: rule, Status: "removed", Freed: size, StartedAt: now, EndedAt: now})
 }

@@ -70,6 +70,10 @@
       "class": "data"
     },
     {
+      "path": "~/Library/Group Containers/{team}.*",
+      "class": "data"
+    },
+    {
       "path": "~/Library/LaunchAgents/{bundleID}.*",
       "class": "state"
     },
@@ -81,6 +85,49 @@
       "path": "~/.{lowername}",
       "class": "data"
     }
+  ],
+  "systemLocations": [
+    {
+      "path": "/Library/Application Support/{bundleID}",
+      "class": "data"
+    },
+    {
+      "path": "/Library/Application Support/{name}",
+      "class": "data"
+    },
+    {
+      "path": "/Library/Caches/{bundleID}",
+      "class": "cache"
+    },
+    {
+      "path": "/Library/Logs/{name}",
+      "class": "logs"
+    },
+    {
+      "path": "/Library/Preferences/{bundleID}.plist",
+      "class": "settings"
+    },
+    {
+      "path": "/Library/LaunchAgents/{bundleID}.*",
+      "class": "state"
+    },
+    {
+      "path": "/Library/LaunchDaemons/{bundleID}.*",
+      "class": "state"
+    },
+    {
+      "path": "/Library/PrivilegedHelperTools/{bundleID}.*",
+      "class": "state"
+    },
+    {
+      "path": "/Library/PrivilegedHelperTools/{bundleID}",
+      "class": "state"
+    }
+  ],
+  "launchdFolders": [
+    "~/Library/LaunchAgents",
+    "/Library/LaunchAgents",
+    "/Library/LaunchDaemons"
   ],
   "leftoverRoots": [
     "~/Library/Application Support",

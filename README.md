@@ -89,8 +89,9 @@ handbyte apps                      # Apps by size and last use; uninstall; lefto
 handbyte apps --unused --json      # Apps not opened for six months, as JSON
 handbyte uninstall Slack           # Review an app and its files, then move them to the Trash
 handbyte uninstall Slack --reset   # Keep the app, remove its files
+handbyte uninstall slack --brew --yes  # Homebrew app: brew uninstall --cask, then its files
 handbyte history                   # Local action records (--json for JSON)
-handbyte restore ACTION_ID         # Restore a recorded Trash action
+handbyte restore ACTION_ID         # Restore a recorded Trash action, or all items of one uninstall
 handbyte config                    # Show project roots and protected paths
 handbyte config roots ~/work       # Save project roots
 handbyte config protect ~/work/keep     # Save a protected path

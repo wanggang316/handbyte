@@ -16,6 +16,12 @@ type Apps struct {
 	Version          int           `json:"version"`
 	ApplicationRoots []string      `json:"applicationRoots"`
 	Locations        []AppLocation `json:"locations"`
+	// SystemLocations are places outside the home folder. Their files
+	// belong to root: they are listed, never selected and never removed.
+	SystemLocations []AppLocation `json:"systemLocations"`
+	// LaunchdFolders hold launchd property lists. A list that names a path
+	// inside the app bundle belongs to the app.
+	LaunchdFolders []string `json:"launchdFolders"`
 	// LeftoverRoots are searched for data of apps that are gone.
 	LeftoverRoots []string `json:"leftoverRoots"`
 	// GenericNames never match an app by name.
@@ -28,7 +34,8 @@ type Apps struct {
 }
 
 // AppLocation is a place where an app keeps files. The path holds one
-// placeholder: {bundleID}, {name} (the app name) or {lowername}. A segment
+// placeholder: {bundleID}, {name} (the app name), {lowername} or {team}
+// (the signing team of the app). A segment
 // may end in ".*" (a dot, then anything) or start with "*." (anything, then
 // a dot): the dot keeps the match on a name boundary.
 type AppLocation struct {
@@ -68,16 +75,32 @@ func ParseApps(data []byte) (Apps, error) {
 		return Apps{}, fmt.Errorf("unsupported version %d", a.Version)
 	}
 	classes := map[string]bool{ClassCache: true, ClassLogs: true, ClassState: true, ClassSettings: true, ClassData: true}
-	for _, l := range a.Locations {
-		if !strings.HasPrefix(l.Path, "~/") || strings.Contains(l.Path, "..") {
-			return Apps{}, fmt.Errorf("location %q must start with ~/", l.Path)
+	check := func(l AppLocation, prefix string) error {
+		if !strings.HasPrefix(l.Path, prefix) || strings.Contains(l.Path, "..") {
+			return fmt.Errorf("location %q must start with %s", l.Path, prefix)
 		}
 		n := strings.Count(l.Path, "{")
-		if n != 1 || !(strings.Contains(l.Path, "{bundleID}") || strings.Contains(l.Path, "{name}") || strings.Contains(l.Path, "{lowername}")) {
-			return Apps{}, fmt.Errorf("location %q needs exactly one placeholder", l.Path)
+		if n != 1 || !(strings.Contains(l.Path, "{bundleID}") || strings.Contains(l.Path, "{name}") || strings.Contains(l.Path, "{lowername}") || strings.Contains(l.Path, "{team}")) {
+			return fmt.Errorf("location %q needs exactly one placeholder", l.Path)
 		}
 		if !classes[l.Class] {
-			return Apps{}, fmt.Errorf("location %q: unknown class %q", l.Path, l.Class)
+			return fmt.Errorf("location %q: unknown class %q", l.Path, l.Class)
+		}
+		return nil
+	}
+	for _, l := range a.Locations {
+		if err := check(l, "~/"); err != nil {
+			return Apps{}, err
+		}
+	}
+	for _, l := range a.SystemLocations {
+		if err := check(l, "/Library/"); err != nil {
+			return Apps{}, err
+		}
+	}
+	for _, f := range a.LaunchdFolders {
+		if !strings.HasPrefix(f, "~/Library/") && !strings.HasPrefix(f, "/Library/") {
+			return Apps{}, fmt.Errorf("launchd folder %q must be in a Library folder", f)
 		}
 	}
 	return a, nil

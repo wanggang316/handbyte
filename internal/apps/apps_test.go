@@ -14,27 +14,43 @@ type appCase struct {
 		BundleID string   `json:"bundleID"`
 		Name     string   `json:"name"`
 		Zap      []string `json:"zap"`
+		Bundle   string   `json:"bundle"`
+		Team     string   `json:"team"`
 	} `json:"app"`
 	Others    []string          `json:"others"`
+	Teams     []string          `json:"otherTeams"`
 	WithData  bool              `json:"withData"`
 	Installed []string          `json:"installed"`
 	Names     []string          `json:"installedNames"`
 	Files     []string          `json:"files"`
+	Contents  map[string]string `json:"contents"`
+	System    []string          `json:"systemFiles"`
+	SystemTxt map[string]string `json:"systemContents"`
 	Expect    []json.RawMessage `json:"expect"`
+	ExpectSys []json.RawMessage `json:"expectSystem"`
 }
 
-func makeHome(t *testing.T, files []string) string {
+func makeHome(t *testing.T, files []string, contents ...map[string]string) string {
 	t.Helper()
 	home, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
+	all := map[string]string{}
 	for _, f := range files {
+		all[f] = "x"
+	}
+	for _, c := range contents {
+		for f, text := range c {
+			all[f] = text
+		}
+	}
+	for f, text := range all {
 		full := filepath.Join(home, f)
 		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(full, []byte("x"), 0o600); err != nil {
+		if err := os.WriteFile(full, []byte(text), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -59,12 +75,18 @@ func TestAppConformance(t *testing.T) {
 			t.Fatalf("%s: %v", path, err)
 		}
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			home := makeHome(t, c.Files)
-			var got []string
+			home := makeHome(t, c.Files, c.Contents)
+			var got, gotSystem []string
 			if c.App != nil {
-				for _, r := range FindRelated(home, Target{BundleID: c.App.BundleID, Name: c.App.Name, Zap: c.App.Zap}, c.Others, c.WithData) {
+				target := Target{BundleID: c.App.BundleID, Name: c.App.Name, Zap: c.App.Zap, Bundle: c.App.Bundle, Team: c.App.Team, OtherTeams: c.Teams}
+				for _, r := range FindRelated(home, target, c.Others, c.WithData) {
 					rel, _ := filepath.Rel(home, r.Path)
 					got = append(got, mustJSON(map[string]any{"path": rel, "class": r.Class, "confidence": r.Confidence, "selected": r.Selected}))
+				}
+				root := makeHome(t, c.System, c.SystemTxt)
+				for _, r := range FindSystem(root, target, c.Others) {
+					rel, _ := filepath.Rel(root, r.Path)
+					gotSystem = append(gotSystem, mustJSON(map[string]any{"path": rel, "class": r.Class, "confidence": r.Confidence}))
 				}
 			} else {
 				for _, l := range FindLeftovers(home, c.Installed, c.Names) {
@@ -82,6 +104,17 @@ func TestAppConformance(t *testing.T) {
 			}
 			if strings.Join(got, "\n") != strings.Join(want, "\n") {
 				t.Fatalf("%s\ngot:\n%s\nwant:\n%s", c.Name, strings.Join(got, "\n"), strings.Join(want, "\n"))
+			}
+			var wantSystem []string
+			for _, e := range c.ExpectSys {
+				var m map[string]any
+				if err := json.Unmarshal(e, &m); err != nil {
+					t.Fatal(err)
+				}
+				wantSystem = append(wantSystem, mustJSON(m))
+			}
+			if strings.Join(gotSystem, "\n") != strings.Join(wantSystem, "\n") {
+				t.Fatalf("%s: system files\ngot:\n%s\nwant:\n%s", c.Name, strings.Join(gotSystem, "\n"), strings.Join(wantSystem, "\n"))
 			}
 		})
 	}
@@ -153,5 +186,46 @@ func TestInventoryReadsBundlesSourcesAndRunningState(t *testing.T) {
 	}
 	if byName["Plain"].Size == 0 || byName["Plain"].LastUsedKnown {
 		t.Errorf("size and last use: %+v", byName["Plain"])
+	}
+}
+
+func TestInventoryReadsTheTeamAndSystemExtensions(t *testing.T) {
+	root := t.TempDir()
+	for _, app := range []string{"Guard.app", "Plain.app"} {
+		dir := filepath.Join(root, app, "Contents")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		plist := `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.example.` + strings.TrimSuffix(app, ".app") + `</string></dict></plist>`
+		if err := os.WriteFile(filepath.Join(dir, "Info.plist"), []byte(plist), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "Guard.app/Contents/Library/SystemExtensions/com.example.Guard.ext.systemextension"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	list, err := Inventory(t.Context(), Options{Roots: []string{root}, SkipSizes: true, Team: func(b string) string {
+		if strings.HasSuffix(b, "Guard.app") {
+			return "ABCDE12345"
+		}
+		return ""
+	}})
+	if err != nil || len(list) != 2 {
+		t.Fatalf("list %+v, %v", list, err)
+	}
+	if !list[0].SystemExtension || list[0].Team != "ABCDE12345" || list[1].SystemExtension || list[1].Team != "" {
+		t.Errorf("facts: %+v", list)
+	}
+	target := TargetFor(list[1], list)
+	if target.Bundle != list[1].Path || len(target.OtherTeams) != 1 || target.OtherTeams[0] != "ABCDE12345" {
+		t.Errorf("target: %+v", target)
+	}
+}
+
+func TestSigningTeamOfARealApp(t *testing.T) {
+	// Safari is signed by Apple, which has no team identifier; the call
+	// must not fail and must give no team.
+	if team := signingTeam("/Applications/Safari.app"); team != "" {
+		t.Errorf("Safari team = %q", team)
 	}
 }

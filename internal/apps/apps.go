@@ -47,6 +47,11 @@ type App struct {
 	Running       bool     `json:"running"`
 	System        bool     `json:"system"`
 	Archs         []string `json:"architectures,omitempty"`
+	// Team is the signing team, empty for an app without one.
+	Team string `json:"team,omitempty"`
+	// SystemExtension: the app installs a system extension. Moving it to
+	// the Trash leaves the extension active, so an uninstall is refused.
+	SystemExtension bool `json:"system_extension,omitempty"`
 	// Zap are the paths the Homebrew cask names for a full removal.
 	Zap []string `json:"-"`
 }
@@ -63,6 +68,8 @@ type Options struct {
 	LastUsed func(paths []string) []time.Time
 	// SkipSizes leaves the sizes at zero, for a fast list.
 	SkipSizes bool
+	// Team reads the signing team of a bundle; nil leaves it empty.
+	Team func(bundle string) string
 }
 
 // DefaultOptions are the real locations and probes.
@@ -78,6 +85,7 @@ func DefaultOptions(home string) Options {
 		Caskrooms: []string{"/opt/homebrew/Caskroom", "/usr/local/Caskroom"},
 		Processes: runningExecutables,
 		LastUsed:  spotlightLastUsed,
+		Team:      signingTeam,
 	}
 }
 
@@ -143,6 +151,9 @@ func Inventory(ctx context.Context, opts Options) ([]App, error) {
 				app.Source, app.CaskToken, app.Zap = SourceHomebrew, c.token, c.zap
 			}
 			app.Archs = architectures(filepath.Join(path, "Contents", "MacOS", app.Executable))
+			if ext, err := os.ReadDir(filepath.Join(path, "Contents", "Library", "SystemExtensions")); err == nil && len(ext) > 0 {
+				app.SystemExtension = true
+			}
 			apps = append(apps, app)
 		}
 	}
@@ -159,6 +170,20 @@ func Inventory(ctx context.Context, opts Options) ([]App, error) {
 				}
 			}
 		}
+	}
+	if opts.Team != nil {
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 8)
+		for i := range apps {
+			wg.Add(1)
+			go func(a *App) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				a.Team = opts.Team(a.Path)
+			}(&apps[i])
+		}
+		wg.Wait()
 	}
 	if opts.LastUsed != nil && len(apps) > 0 {
 		paths := make([]string, len(apps))
@@ -189,6 +214,29 @@ func Inventory(ctx context.Context, opts Options) ([]App, error) {
 		wg.Wait()
 	}
 	return apps, ctx.Err()
+}
+
+// signingTeam reads the team identifier of the code signature. codesign
+// prints it without a check of the signature.
+func signingTeam(bundle string) string {
+	out, _ := exec.Command("/usr/bin/codesign", "-dv", "--", bundle).CombinedOutput()
+	for _, line := range strings.Split(string(out), "\n") {
+		if v, ok := strings.CutPrefix(line, "TeamIdentifier="); ok && teamID.MatchString(v) {
+			return v
+		}
+	}
+	return ""
+}
+
+// TargetFor returns the matching facts of an app; all is the inventory.
+func TargetFor(a App, all []App) Target {
+	t := Target{BundleID: a.BundleID, Name: a.Name, Zap: a.Zap, Bundle: a.Path, Team: a.Team}
+	for _, o := range all {
+		if o.Path != a.Path && o.Team != "" {
+			t.OtherTeams = append(t.OtherTeams, o.Team)
+		}
+	}
+	return t
 }
 
 func exists(path string) bool {

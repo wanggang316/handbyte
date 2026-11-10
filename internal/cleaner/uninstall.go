@@ -23,9 +23,11 @@ type AppPlan struct {
 	Bundle         string
 	BundleIdentity scanner.Identity
 	Files          []Collected
-	// System and Cask come from the inventory; both refuse the uninstall.
-	System bool
-	Cask   string
+	// System, Cask and SystemExtension come from the inventory; each
+	// refuses the uninstall.
+	System          bool
+	Cask            string
+	SystemExtension bool
 }
 
 // AppOptions controls Uninstall.
@@ -81,6 +83,8 @@ func CheckApp(p AppPlan, opts AppOptions) error {
 		return fmt.Errorf("%s is part of macOS and cannot be uninstalled", p.Name)
 	case p.Cask != "" && p.Bundle != "":
 		return fmt.Errorf("%s was installed with Homebrew; run: brew uninstall --cask %s", p.Name, p.Cask)
+	case p.SystemExtension && p.Bundle != "":
+		return fmt.Errorf("%s installs a system extension; remove it with the app's own uninstaller, or turn the extension off in System Settings > General > Login Items & Extensions first", p.Name)
 	case p.Bundle != "" && opts.Running != nil && opts.Running(p.Bundle):
 		return fmt.Errorf("%s is running; quit it first", p.Name)
 	}

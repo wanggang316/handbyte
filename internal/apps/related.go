@@ -1,9 +1,12 @@
 package apps
 
 import (
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -26,9 +29,12 @@ type Related struct {
 	Class      string `json:"class"`
 	Confidence string `json:"confidence"`
 	// Selected is the default choice for an uninstall.
-	Selected bool  `json:"selected"`
-	IsDir    bool  `json:"is_dir"`
-	Size     int64 `json:"size_bytes"`
+	Selected bool `json:"selected"`
+	// System files are outside the home folder and belong to root. They
+	// are listed for the user; the tool does not remove them.
+	System bool  `json:"system,omitempty"`
+	IsDir  bool  `json:"is_dir"`
+	Size   int64 `json:"size_bytes"`
 }
 
 // Target is what the matching needs to know about an app.
@@ -36,7 +42,16 @@ type Target struct {
 	BundleID string
 	Name     string
 	Zap      []string
+	// Bundle is the path of the .app folder. A launchd property list that
+	// names a path inside it belongs to the app.
+	Bundle string
+	// Team is the signing team. OtherTeams are the teams of the other
+	// installed apps: a group container of a shared team is not offered.
+	Team       string
+	OtherTeams []string
 }
+
+var teamID = regexp.MustCompile(`^[A-Z0-9]{10}$`)
 
 // Selected says whether a file of this class and confidence is chosen for
 // an uninstall by default. Caches, logs and state are made again by the
@@ -83,8 +98,84 @@ func FindRelated(home string, t Target, others []string, withData bool) []Relate
 		}
 		found[path] = Related{Path: path, Class: class, Confidence: confidence, IsDir: info.IsDir(), Selected: defaultSelected(class, confidence, withData)}
 	}
-	for _, l := range a.Locations {
-		template := expand(home, l.Path)
+	matchLocations(a, a.Locations, func(p string) string { return expand(home, p) }, t, nameOK, idOK, add)
+	for _, folder := range a.LaunchdFolders {
+		if strings.HasPrefix(folder, "~/") {
+			lists, _ := launchdOwned(expand(home, folder), t, "")
+			for _, p := range lists {
+				add(p, catalog.ClassState, High)
+			}
+		}
+	}
+	for _, z := range t.Zap {
+		if !strings.HasPrefix(z, "~/") || strings.ContainsAny(z, "*?[") {
+			continue
+		}
+		path := expand(home, z)
+		if !strings.HasPrefix(path, filepath.Join(home, "Library")+"/") {
+			continue
+		}
+		add(path, classOf(path, home), Medium)
+	}
+	out := make([]Related, 0, len(found))
+	for _, r := range found {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// FindSystem returns the files of an app outside the home folder, below
+// root ("/" on a Mac, a test folder in tests), in path order. They are
+// never selected: they belong to root.
+func FindSystem(root string, t Target, others []string) []Related {
+	if isProtected(t.BundleID) {
+		return nil
+	}
+	a := catalog.LoadApps()
+	generic := map[string]bool{}
+	for _, g := range a.GenericNames {
+		generic[g] = true
+	}
+	nameOK := len([]rune(t.Name)) >= 3 && !generic[strings.ToLower(t.Name)]
+	found := map[string]Related{}
+	add := func(path, class, confidence string) {
+		path = filepath.Clean(path)
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || belongsToOther(filepath.Base(path), t.BundleID, others) {
+			return
+		}
+		if old, ok := found[path]; ok && rank(old.Confidence) >= rank(confidence) {
+			return
+		}
+		found[path] = Related{Path: path, Class: class, Confidence: confidence, IsDir: info.IsDir(), System: true}
+	}
+	matchLocations(a, a.SystemLocations, func(p string) string { return filepath.Join(root, p) }, t, nameOK, validBundleID(t.BundleID), add)
+	for _, folder := range a.LaunchdFolders {
+		if strings.HasPrefix(folder, "/") {
+			lists, helpers := launchdOwned(filepath.Join(root, folder), t, root)
+			for _, p := range append(lists, helpers...) {
+				add(p, catalog.ClassState, High)
+			}
+		}
+	}
+	out := make([]Related, 0, len(found))
+	for _, r := range found {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// matchLocations expands each location for the target: a bundle ID match
+// is high, a name or team match medium, a lower-case name low.
+func matchLocations(a catalog.Apps, locations []catalog.AppLocation, expandPath func(string) string, t Target, nameOK, idOK bool, add func(path, class, confidence string)) {
+	generic := map[string]bool{}
+	for _, g := range a.GenericNames {
+		generic[g] = true
+	}
+	for _, l := range locations {
+		template := expandPath(l.Path)
 		switch {
 		case strings.Contains(template, "{bundleID}"):
 			if !idOK {
@@ -108,24 +199,92 @@ func FindRelated(home string, t Target, others []string, withData bool) []Relate
 			for _, p := range matchSegment(template, "{lowername}", low) {
 				add(p, l.Class, Low)
 			}
+		case strings.Contains(template, "{team}"):
+			if !teamID.MatchString(t.Team) || slices.Contains(t.OtherTeams, t.Team) {
+				continue
+			}
+			for _, p := range matchSegment(template, "{team}", t.Team) {
+				add(p, l.Class, Medium)
+			}
 		}
 	}
-	for _, z := range t.Zap {
-		if !strings.HasPrefix(z, "~/") || strings.ContainsAny(z, "*?[") {
+}
+
+// launchdOwned returns the property lists in folder that belong to the
+// app: they name its bundle ID in AssociatedBundleIdentifiers, or their
+// program is inside the bundle. helpers are the programs of those lists in
+// /Library/PrivilegedHelperTools, below root.
+func launchdOwned(folder string, t Target, root string) (lists, helpers []string) {
+	entries, err := os.ReadDir(folder)
+	if err != nil {
+		return nil, nil
+	}
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".plist") || !e.Type().IsRegular() {
 			continue
 		}
-		path := expand(home, z)
-		if !strings.HasPrefix(path, filepath.Join(home, "Library")+"/") {
+		path := filepath.Join(folder, e.Name())
+		job := readLaunchdJob(path)
+		if job == nil {
 			continue
 		}
-		add(path, classOf(path, home), Medium)
+		program := job.program()
+		owned := t.Bundle != "" && strings.HasSuffix(t.Bundle, ".app") && strings.HasPrefix(program, t.Bundle+"/")
+		if validBundleID(t.BundleID) && slices.ContainsFunc(job.associated(), func(id string) bool { return strings.EqualFold(id, t.BundleID) }) {
+			owned = true
+		}
+		if !owned {
+			continue
+		}
+		lists = append(lists, path)
+		if dir, name := filepath.Split(program); filepath.Clean(dir) == "/Library/PrivilegedHelperTools" && name != "" {
+			helpers = append(helpers, filepath.Join(root, program))
+		}
 	}
-	out := make([]Related, 0, len(found))
-	for _, r := range found {
-		out = append(out, r)
+	return lists, helpers
+}
+
+type launchdJob map[string]any
+
+// readLaunchdJob reads a launchd property list, in XML or binary form,
+// through plutil. Nil for a file that is not a property list.
+func readLaunchdJob(path string) launchdJob {
+	out, err := exec.Command("/usr/bin/plutil", "-convert", "json", "-o", "-", "--", path).Output()
+	if err != nil {
+		return nil
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	return out
+	var job launchdJob
+	if json.Unmarshal(out, &job) != nil {
+		return nil
+	}
+	return job
+}
+
+func (j launchdJob) program() string {
+	if p, ok := j["Program"].(string); ok {
+		return p
+	}
+	if args, ok := j["ProgramArguments"].([]any); ok && len(args) > 0 {
+		p, _ := args[0].(string)
+		return p
+	}
+	return ""
+}
+
+func (j launchdJob) associated() []string {
+	switch v := j["AssociatedBundleIdentifiers"].(type) {
+	case string:
+		return []string{v}
+	case []any:
+		var out []string
+		for _, x := range v {
+			if s, ok := x.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 func rank(confidence string) int {

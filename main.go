@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -75,6 +76,7 @@ Options of apps:
 Options of uninstall:
   --with-data      Also select the app's own data (documents, databases)
   --reset          Keep the app; remove only its files
+  --brew           For a Homebrew app: run brew uninstall --cask, then move its files
   --dry-run        Show what would move; change nothing
   --yes            Move without the review (without a terminal: required)
 
@@ -589,8 +591,13 @@ func cmdApps(args []string, open string) error {
 		Inventory: func(ctx context.Context) ([]apps.App, error) { return apps.Inventory(ctx, fast) },
 		Sizes:     apps.MeasureSizes,
 		Known:     apps.KnownBundleIDs,
-		Related: func(a apps.App, others []string, withData bool) []apps.Related {
-			files := apps.FindRelated(home, apps.Target{BundleID: a.BundleID, Name: a.Name, Zap: a.Zap}, others, withData)
+		Related: func(a apps.App, all []apps.App, withData bool) []apps.Related {
+			files := apps.FindRelated(home, apps.TargetFor(a, all), otherIDs(a, all), withData)
+			apps.MeasureRelated(context.Background(), files)
+			return files
+		},
+		System: func(a apps.App, all []apps.App) []apps.Related {
+			files := apps.FindSystem("/", apps.TargetFor(a, all), otherIDs(a, all))
 			apps.MeasureRelated(context.Background(), files)
 			return files
 		},
@@ -607,6 +614,43 @@ func cmdApps(args []string, open string) error {
 			return cleaner.Uninstall(ctx, plan, cleaner.AppOptions{Roots: opts.Roots, Running: bundleRunning})
 		},
 	})
+}
+
+var caskToken = regexp.MustCompile(`^[a-z0-9@._+][a-z0-9@._+-]*$`)
+
+// brewUninstall runs brew uninstall --cask with the output on the terminal.
+func brewUninstall(token string) error {
+	if !caskToken.MatchString(token) {
+		return fmt.Errorf("the cask name %q is not valid", token)
+	}
+	brew := ""
+	for _, p := range []string{"/opt/homebrew/bin/brew", "/usr/local/bin/brew"} {
+		if info, err := os.Stat(p); err == nil && info.Mode()&0o111 != 0 {
+			brew = p
+			break
+		}
+	}
+	if brew == "" {
+		return errors.New("Homebrew was not found in /opt/homebrew or /usr/local")
+	}
+	cmd := exec.Command(brew, "uninstall", "--cask", token)
+	cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1", "HOMEBREW_NO_ENV_HINTS=1")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("brew uninstall --cask %s: %w", token, err)
+	}
+	return nil
+}
+
+// otherIDs returns the bundle IDs of the apps in all except a.
+func otherIDs(a apps.App, all []apps.App) []string {
+	var out []string
+	for _, o := range all {
+		if o.Path != a.Path {
+			out = append(out, o.BundleID)
+		}
+	}
+	return out
 }
 
 // bundleRunning reports whether a process of the app bundle runs now.
@@ -655,6 +699,7 @@ func cmdUninstall(args []string) error {
 	reset := fs.Bool("reset", false, "")
 	dryRun := fs.Bool("dry-run", false, "")
 	yes := fs.Bool("yes", false, "")
+	brew := fs.Bool("brew", false, "")
 	positional, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -662,8 +707,11 @@ func cmdUninstall(args []string) error {
 	if len(positional) != 1 {
 		return usageError{"uninstall needs one app name or bundle ID; see: handbyte apps"}
 	}
+	if *brew && *reset {
+		return usageError{"--brew removes the app; --reset keeps it"}
+	}
 	name := positional[0]
-	if interactive() && !*yes && !*dryRun && !*reset {
+	if interactive() && !*yes && !*dryRun && !*reset && !*brew {
 		flagArgs := []string{}
 		if *withData {
 			flagArgs = append(flagArgs, "--with-data")
@@ -681,21 +729,26 @@ func cmdUninstall(args []string) error {
 		return err
 	}
 	var app *apps.App
-	var others []string
 	for i := range list {
-		if strings.EqualFold(list[i].Name, name) || strings.EqualFold(list[i].BundleID, name) {
+		if strings.EqualFold(list[i].Name, name) || strings.EqualFold(list[i].BundleID, name) || list[i].CaskToken != "" && list[i].CaskToken == name {
 			app = &list[i]
-		} else {
-			others = append(others, list[i].BundleID)
 		}
 	}
 	if app == nil {
 		return fmt.Errorf("no app named %q in %s", name, strings.Join(opts.Roots, " or "))
 	}
-	files := apps.FindRelated(home, apps.Target{BundleID: app.BundleID, Name: app.Name, Zap: app.Zap}, others, *withData)
+	target, others := apps.TargetFor(*app, list), otherIDs(*app, list)
+	files := apps.FindRelated(home, target, others, *withData)
 	apps.MeasureRelated(context.Background(), files)
-	plan := cleaner.AppPlan{Name: app.Name, BundleID: app.BundleID, System: app.System, Cask: app.CaskToken}
-	if !*reset {
+	plan := cleaner.AppPlan{Name: app.Name, BundleID: app.BundleID, System: app.System, Cask: app.CaskToken, SystemExtension: app.SystemExtension}
+	if *brew {
+		if app.CaskToken == "" {
+			return fmt.Errorf("%s was not installed with Homebrew", app.Name)
+		}
+		// Homebrew removes the bundle; the files in the home folder follow
+		// as a reset.
+		fmt.Printf("app       %s  (brew uninstall --cask %s)\n", app.Path, app.CaskToken)
+	} else if !*reset {
 		id, err := scanner.EntryIdentity(app.Path)
 		if err != nil {
 			return err
@@ -715,9 +768,24 @@ func cmdUninstall(args []string) error {
 		}
 		fmt.Printf("%-9s %-8s %-6s %10s  %s\n", f.Class, f.Confidence, mark, tui.Bytes(f.Size), f.Path)
 	}
+	for _, f := range apps.FindSystem("/", target, others) {
+		fmt.Printf("%-9s %-8s %-6s %10s  %s\n", f.Class, f.Confidence, "root", "", f.Path)
+	}
 	if !*yes && !*dryRun {
 		fmt.Println("Nothing was changed. Run with --yes to move the items marked move to the Trash.")
+		fmt.Println("Items marked root belong to the administrator; Handbyte does not remove them. Remove them in Finder.")
 		return nil
+	}
+	if *brew && !*dryRun {
+		if bundleRunning(app.Path) {
+			return fmt.Errorf("%s is running; quit it first", app.Name)
+		}
+		if err := brewUninstall(app.CaskToken); err != nil {
+			return err
+		}
+		if err := cleaner.RecordRemoved(app.Path, "app:"+app.BundleID, app.Size); err != nil {
+			fmt.Fprintln(os.Stderr, "handbyte: the journal was not written:", err)
+		}
 	}
 	group, results, err := cleaner.Uninstall(context.Background(), plan, cleaner.AppOptions{Roots: opts.Roots, Running: bundleRunning, DryRun: *dryRun})
 	moved := 0
