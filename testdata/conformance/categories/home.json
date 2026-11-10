@@ -1,0 +1,24 @@
+{
+  "name": "each tree goes to the category of its longest path rule, and the rest is other",
+  "projectRoots": ["~/dev"],
+  "files": [
+    {"path": "Movies/clip.mov", "bytes": 50000},
+    {"path": "Documents/report.pdf", "bytes": 7000},
+    {"path": "Desktop/note.txt", "bytes": 300},
+    {"path": "Library/Application Support/Example/data.db", "bytes": 9000},
+    {"path": "Library/Application Support/Code/User/state.db", "bytes": 4000},
+    {"path": "Library/Caches/com.example.app/Cache.db", "bytes": 2000},
+    {"path": "Library/Preferences/com.example.plist", "bytes": 100},
+    {"path": "dev/web/node_modules/a.js", "bytes": 6000},
+    {"path": ".cargo/registry/index", "bytes": 1000},
+    {"path": "notes.txt", "bytes": 20}
+  ],
+  "expect": {
+    "media": 50000,
+    "documents": 7300,
+    "apps": 9000,
+    "developer": 11000,
+    "caches": 2000,
+    "other": 120
+  }
+}

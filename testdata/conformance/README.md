@@ -35,3 +35,20 @@ storage engine and compares the result.
 
 The cases compare logical sizes, because the allocated size of a file
 depends on the file system.
+
+## categories
+
+A case builds a home directory, scans it with the storage engine and sums
+the content by the categories of `catalog/storage.json`.
+
+| Field | Meaning |
+| --- | --- |
+| `projectRoots` | Project roots, as `~/` templates. They belong to a category with `"projectRoots": true`. |
+| `files` | Files to make, as paths relative to the home directory |
+| `expect` | Logical bytes for each category ID. A category with no bytes is left out. |
+
+The rule: a folder belongs to the category of the longest path rule that
+is the folder or one of its parents, and to `other` when no rule matches.
+When a path rule lies below a folder, the folder is split: each child is
+measured by the same rule, and the files directly in the folder go to the
+category of the folder.

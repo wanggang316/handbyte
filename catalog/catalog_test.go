@@ -39,3 +39,34 @@ func TestParseRejectsDefectiveRules(t *testing.T) {
 		}
 	}
 }
+
+func TestEmbeddedStorageCategoriesAreValid(t *testing.T) {
+	s, err := ParseStorage(storageJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := s.Paths("/Users/alice", []string{"~/dev"})
+	found := map[string]string{}
+	for _, p := range paths {
+		found[p.Path] = p.Category
+	}
+	if found["/Users/alice/Movies"] != "media" || found["/Users/alice/dev"] != "developer" || found["/Applications"] != "apps" {
+		t.Fatalf("unexpected paths: %v", found)
+	}
+}
+
+func TestParseStorageRejectsDefects(t *testing.T) {
+	cases := map[string]string{
+		"no other":       `{"version":1,"categories":[{"id":"a","title":"A","paths":[]}]}`,
+		"relative path":  `{"version":1,"categories":[{"id":"other","title":"O","paths":["Movies"]}]}`,
+		"repeated path":  `{"version":1,"categories":[{"id":"a","title":"A","paths":["~/x"]},{"id":"other","title":"O","paths":["~/x"]}]}`,
+		"repeated id":    `{"version":1,"categories":[{"id":"other","title":"A","paths":[]},{"id":"other","title":"O","paths":[]}]}`,
+		"unknown field":  `{"version":1,"categories":[{"id":"other","title":"O","paths":[],"glob":"*"}]}`,
+		"trailing slash": `{"version":1,"categories":[{"id":"other","title":"O","paths":["~/x/"]}]}`,
+	}
+	for name, data := range cases {
+		if _, err := ParseStorage([]byte(data)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
