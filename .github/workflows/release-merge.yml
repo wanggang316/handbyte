@@ -37,6 +37,7 @@ jobs:
           TAG="${HEAD_REF#release/}"
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo '::error::Expected branch release/vX.Y.Z'; exit 1; }
           [[ "$(git rev-parse HEAD)" == "$SHA" ]]
+          python3 scripts/release-notes.py "$TAG" > /dev/null
           # An annotated tag has a peeled commit; a lightweight tag has one row.
           EXISTING=$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | tail -1 | awk '{print $1}')
           if [[ -n "$EXISTING" && "$EXISTING" != "$SHA" ]]; then
