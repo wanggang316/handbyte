@@ -1,9 +1,10 @@
 # Redesign plan: clean, apps and storage for the CLI and the macOS app
 
-Status: proposal, 2026-11-10, revision 2. Not approved. The section "Open
-decisions" lists what must be decided before implementation starts.
-Revision 2 adds one-step cleaning, the waiting states, a lighter visual
-direction and the logo.
+Status: proposal, 2026-11-10, revision 3. Not approved. The section
+"Decisions" lists what is decided and what is open.
+Revision 2 added one-step cleaning, the waiting states, a lighter visual
+direction and the logo. Revision 3 records the decisions, adds the system
+areas to Clean, describes the removal modes and changes the logo.
 Research date: 2026-11-10. Baseline: handbyte `ac17ede`, handbyte-macos
 `cae90e7`, Mole `28e68bd`, Pearcleaner `7724df7`.
 Visual design: <https://claude.ai/artifact/UakSsGMe8KGWjUKtWb9yop> (private
@@ -115,11 +116,38 @@ Keep the present eligibility policy and the recheck before each action.
 Smart Clean never takes a Review item. After it finishes, the result names
 what stays ("5.2 GB more needs review") and links to "Choose items".
 
-Smart Clean removes Safe items directly, so that the freed number is real.
-A Safe item is one that its owner makes again, so a restore has no value.
-Review items, apps and collected files always go to the Trash. A setting
-("Always use the Trash") changes Smart Clean to the Trash. This changes the
-present default and is open decision 1.
+#### Removal mode
+
+Open, see "Decisions". What Mole `28e68bd` does:
+
+- `mo clean` has no confirmation and no selection. It asks only for the
+  administrator password, then scans and deletes section by section. It
+  deletes permanently, and it also empties `~/.Trash` unless the user
+  protects it.
+- `mo purge` and `mo installer` delete permanently after a selection.
+  `mo uninstall`, `mo analyze` and `mo slim` use the Trash after a
+  confirmation. `mo uninstall --permanent` skips the Trash.
+- Its audit keeps this split on purpose: "Changing every cleanup to Trash
+  would change its existing reclaim-space contract."
+- It has no restore. In place of one it has `--dry-run`, a whitelist, a path
+  validator, a refusal when the owner process runs or holds an open handle
+  on a cache, and an operation log.
+
+The split in Mole follows what the data is. Data that its owner makes again
+is deleted. Data that cannot be made again goes to the Trash. The proposal
+uses the same rule and states the class in each catalog rule:
+
+| Class | Examples | Removal | Recovery |
+| --- | --- | --- | --- |
+| Rebuildable | Caches, logs, build data, package manager stores | Direct | None needed. The owner makes it again. |
+| Not rebuildable | Apps, leftovers with settings, installers, downloads, backups, archives, files from the Storage collector | Trash | Restore from History |
+
+Smart Clean takes only rebuildable Safe items, so it removes them directly
+and the freed number is real. Three points go further than Mole: the scan
+ends before any removal, the user sees the total and confirms once, and
+Smart Clean never empties `~/.Trash`. The option `--trash` and the setting
+"Always use the Trash" change direct removal to the Trash; then the result
+offers "Empty these items now".
 
 #### Finer rules
 
@@ -158,6 +186,10 @@ Add categories in this order. Each one is a named rule in the catalog.
 | iOS backups | `MobileSync/Backup` | Review | The newest backup for each device is protected |
 | Trash | `~/.Trash` | Review | Permanent. Needs its own confirmation. |
 | Local snapshots | `tmutil listlocalsnapshots` | Protected | Shown as information only |
+| System caches | Named rules below `/Library/Caches`. No `com.apple.*` rule without a fixture. | Safe | Admin rights. Owner not running. |
+| System logs | `/Library/Logs`, rotated files in `/private/var/log`, `/Library/Logs/DiagnosticReports`, files older than 30 days | Safe | Admin rights. Keep the directories and the active log files. |
+| System diagnostics data | `/private/var/db/diagnostics`, `/private/var/db/powerlog` | Review | Admin rights. Not while a diagnosis runs. |
+| Update files | `/Library/Updates`, "Install macOS" apps | Review | Admin rights. Not while an update is pending. |
 
 #### Waiting states
 
@@ -193,9 +225,14 @@ Flow for "Choose items" and "Deep scan": the same scan screen, then the
 grouped review list, then confirmation, then the same result page with
 "Review remaining" and the log.
 
-Not planned: `/Library/Caches`, `/private/var`, language files, universal
-binary thinning and any "optimize" action. They need root or break code
-signatures, and they caused the most severe reports against other tools.
+System areas are in scope, because the main tools of this type have them.
+They are a separate area in the result ("System", needs an administrator),
+they use the same named rules, and Smart Clean includes them only when admin
+rights are available. See "Admin rights".
+
+Not planned: language files, universal binary thinning, `/private/var/folders`
+and any "optimize" action. They break code signatures or remove data that
+running processes use.
 
 ### Apps
 
@@ -230,8 +267,7 @@ them back. "Reset app" removes the data and keeps the bundle. Apps installed
 by Homebrew use `brew uninstall`, so that the Homebrew state stays correct.
 System apps, security software and apps with system extensions are refused,
 and the screen says what to use instead. Items in `/Library` that need admin
-rights are listed with a "remove in Finder" action in the first release. A
-privileged helper is a later, separate decision.
+rights follow the section "Admin rights".
 
 ### Storage
 
@@ -277,6 +313,25 @@ Views:
   (an app and its files). The app gains Restore; today only the CLI has it.
 - The result reports four numbers separately: moved to Trash, removed, frees
   now (private size) and the observed change of free space.
+
+#### Admin rights
+
+Some targets belong to root: the system areas of Clean, and the parts of an
+app in `/Library/LaunchDaemons`, `/Library/PrivilegedHelperTools` and
+`/Library/Application Support`. A process of the user cannot remove them.
+There are three ways to get the right:
+
+| Way | How | Cost |
+| --- | --- | --- |
+| No rights | List the items. "Show in Finder" lets the user remove them. | Not one step. A launch daemon stays loaded until restart. |
+| One-time authorization | CLI: `sudo`, asked once for each run, as Mole does. App: the system password dialog for one run of a fixed, validated command. | A password prompt for each run. No code stays installed. |
+| Privileged helper | A small root daemon that the app installs once (`SMAppService`). The app sends requests through XPC. | No more prompts. A root service stays installed, and each request must be validated against the catalog. A defect in it is a privilege escalation. |
+
+Proposal: one-time authorization in both products. The root side accepts
+only rule IDs and journal entry IDs, never paths or commands, and applies
+the same executor checks. The helper is not built unless the prompt proves
+to be a real problem. To test first: the app dialog on the supported macOS
+versions, and that a user process cannot replace the executed binary.
 
 ## CLI design
 
@@ -417,21 +472,33 @@ keyboard path and a context menu entry.
 
 ### Logo
 
-The canvas shows three directions. Recommended: **A, "Bite"**. It is a
-rounded block of storage with a round bite out of the top right corner, and a
-small green square, the byte that left. It shows freed space without a broom
-or a disk, the word "bite" echoes "byte", and the shape is clear at 16 px.
+Direction: **two capsule bars**, one above the other. The top bar is the
+disk before: ink, almost full. The bottom bar is the disk after: a short ink
+part, and the rest is free. The logo is the product's own progress bar. The
+first three directions (Bite, letter h, Trim) were set aside as too
+abstract; the canvas keeps them small for comparison.
+
+The canvas shows three drawings of the direction:
+
+- **D1, Quiet**: pale tracks, the bottom fill is green. The lightest. At
+  16 px the tracks fade and the two fills can look like lines of text.
+- **D2, Freed** (recommended): the free part of the bottom bar is green. Ink
+  is used space, green is the space that came back. Both bars keep their
+  full shape at 16 px.
+- **D3, Outline**: outlined tracks. Clear when large, not clear at 16 px.
+
+Rules for all drawings:
 
 - Colors: ink and one green. No gradient.
-- App icon: the mark in white on an ink squircle. A light variant is in the
-  canvas.
+- App icon: the mark in white and green on an ink squircle. A light variant
+  is in the canvas.
 - Wordmark: the mark, then "handbyte" in lower case, weight 650, tight
   tracking.
-- Terminal: two cells, `▙▝`, then the name in bold.
+- Terminal: two lines of six cells made from `━` and `─`, the same glyphs
+  as the progress line. One-line contexts use the name only.
 
-Directions B (a lower-case h with the byte) and C (three rows, the top one
-trimmed) are in the canvas for comparison. After the choice, redraw
-`scripts/render-app-icon.swift`, the favicon and the website header.
+After the choice, redraw `scripts/render-app-icon.swift`, the favicon and the
+website header.
 
 ## Architecture
 
@@ -471,27 +538,26 @@ a light theme and with `NO_COLOR`; app screens are checked in both
 appearances, with Reduce Motion and with keyboard only; no test acts on real
 user data.
 
-## Open decisions
+## Decisions
 
-1. **How Smart Clean removes Safe items.** Recommended: direct removal, so
-   that the freed number is real, with the setting "Always use the Trash".
-   Alternative: the Trash for all items, as today. Then one step frees no
-   space until the Trash is emptied, and the result must offer "Empty these
-   items now".
-2. **Logo.** Recommended: direction A, "Bite".
-3. **Core strategy.** Recommended: two native cores, with a shared catalog and
-   shared fixtures. Alternative: the app embeds the Go engine and reads JSON
-   events from it. That gives one implementation, but it adds a signed helper
-   binary and a process boundary for progress and cancellation, and the app
-   was moved to an independent Swift core one release ago.
-4. **Admin-owned leftovers.** Recommended: list them and open Finder in the
-   first release. Alternative: a privileged helper with a narrow, validated
-   path interface. That is more complete, and it adds a large security
-   surface.
-5. **Scope of Clean.** Recommended: user-level rules only, as listed. This
-   excludes system caches, which other tools offer.
-6. **Storage view in the app.** Recommended: treemap with a side list.
-   Alternative: sunburst.
-7. **Sequence.** Recommended: Storage before Clean and Apps, because both use
-   the engine. Alternative: Apps first, if uninstall is the most wanted
-   feature.
+Decided on 2026-11-10:
+
+- **Core strategy.** Two native cores with a shared catalog and shared
+  fixtures. The app does not embed the Go engine.
+- **Scope of Clean.** As complete as is reasonable. The system areas that
+  the main tools of this type clean are in scope, with named rules and admin
+  rights.
+- **Storage view in the app.** Treemap with a side list.
+- **Sequence.** Storage before Clean and Apps.
+- **Logo direction.** Two capsule bars. Directions A to C are set aside.
+
+Open:
+
+1. **Removal mode.** Proposed: by data class, as in "Removal mode". Direct
+   removal for rebuildable items, the Trash for all other items, `--trash`
+   as the option. Alternative: the Trash for all items, as today; then one
+   step frees no space until the Trash is emptied.
+2. **Admin rights.** Proposed: one-time authorization in both products, no
+   installed helper. Alternatives: no rights (list only), or a privileged
+   helper.
+3. **Logo drawing.** Proposed: D2. Alternatives: D1, D3.
