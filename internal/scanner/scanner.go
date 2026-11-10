@@ -23,6 +23,10 @@ type Progress struct {
 	ItemsFound  int
 	Done        bool
 	Items       []Item
+	// AreaTasks and AreaDone count the locations of each area: all, and
+	// measured so far. They are set once the locations are known.
+	AreaTasks map[string]int
+	AreaDone  map[string]int
 }
 
 // Config controls a scan.
@@ -189,6 +193,22 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 	if cfg.ActivityProbe == nil {
 		cfg.ActivityProbe = processProbe(ctx)
 	}
+	areaTasks := map[string]int{}
+	areaDone := map[string]int{}
+	for _, t := range tasks {
+		areaTasks[t.area]++
+	}
+	areaSnapshot := func() (map[string]int, map[string]int) {
+		total := make(map[string]int, len(areaTasks))
+		done := make(map[string]int, len(areaDone))
+		for k, v := range areaTasks {
+			total[k] = v
+		}
+		for k, v := range areaDone {
+			done[k] = v
+		}
+		return total, done
+	}
 
 	// Now du each task concurrently.
 	var (
@@ -208,6 +228,7 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		emitOnce.Lock()
 		mu.Lock()
 		snapshot := append([]Item(nil), items...)
+		total, done := areaSnapshot()
 		mu.Unlock()
 		select {
 		case progress <- Progress{
@@ -216,6 +237,8 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 			FilesSeen:   files.Load(),
 			ItemsFound:  len(snapshot),
 			Items:       snapshot,
+			AreaTasks:   total,
+			AreaDone:    done,
 		}:
 		default:
 		}
@@ -239,6 +262,10 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 				bytes.Add(size)
 				files.Add(count)
 				if size < cfg.MinSize && scanErr == nil {
+					mu.Lock()
+					areaDone[t.area]++
+					mu.Unlock()
+					emit(t.path)
 					continue
 				}
 				status := "complete"
@@ -266,6 +293,7 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 				assess(ctx, &it, cfg.Exclusions, cfg.ActivityProbe)
 				mu.Lock()
 				items = append(items, it)
+				areaDone[t.area]++
 				mu.Unlock()
 				emit(t.path)
 			}
@@ -286,12 +314,16 @@ dispatch:
 
 	if progress != nil {
 		emitOnce.Lock()
+		total, done := areaSnapshot()
 		select {
 		case progress <- Progress{
 			BytesSeen:  bytes.Load(),
 			FilesSeen:  files.Load(),
 			ItemsFound: len(items),
 			Done:       true,
+			Items:      append([]Item(nil), items...),
+			AreaTasks:  total,
+			AreaDone:   done,
 		}:
 		default:
 		}

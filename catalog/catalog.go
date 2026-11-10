@@ -67,6 +67,8 @@ type Rule struct {
 	// CLI does not clean the rule's items. No processes: the CLI cannot
 	// check the owner and only shows the items.
 	Processes []string `json:"processes,omitempty"`
+	// OwnerName is the program that makes the data, for the screen.
+	OwnerName string `json:"ownerName,omitempty"`
 }
 
 // Load returns the embedded cleanup catalog. It panics on a defective

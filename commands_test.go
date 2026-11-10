@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wanggang316/handbyte/internal/scanner"
 )
@@ -185,5 +186,44 @@ func TestOldFlagsStillWorkAndNameTheNewCommand(t *testing.T) {
 	r = run("--scan-only", "--no-projects", "--min", "0")
 	if r.code != 0 || !strings.Contains(r.stderr, "handbyte clean --json") || !strings.HasPrefix(strings.TrimSpace(r.stdout), "{") {
 		t.Fatalf("--scan-only: %+v", r)
+	}
+}
+
+func TestCleanWithoutATerminalPrintsTheSummaryAndCleansWithYes(t *testing.T) {
+	run, home := buildCLI(t)
+	cache := filepath.Join(home, ".terraform.d/plugin-cache")
+	if err := os.MkdirAll(cache, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cache, "provider"), make([]byte, 3<<20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	for _, p := range []string{filepath.Join(cache, "provider"), cache} {
+		if err := os.Chtimes(p, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := run("clean")
+	if r.code != 0 || !strings.Contains(r.stdout, "Safe to clean: 3.0 MiB in 1 item") || !strings.Contains(r.stdout, "Nothing was changed") {
+		t.Fatalf("clean: %+v", r)
+	}
+	if r := run("clean", "--yes", "--dry-run"); !strings.Contains(r.stdout, "Preview: 3.0 MiB") {
+		t.Fatalf("clean --yes --dry-run: %+v", r)
+	}
+	if _, err := os.Stat(cache); err != nil {
+		t.Fatal("a preview must not change the cache")
+	}
+	if r := run("clean", "--yes"); !strings.Contains(r.stdout, "Removed 3.0 MiB") {
+		t.Fatalf("clean --yes: %+v", r)
+	}
+	if _, err := os.Stat(cache); !os.IsNotExist(err) {
+		t.Fatal("the rebuildable cache must be removed directly")
+	}
+	if r := run("history", "--json"); !strings.Contains(r.stdout, `"Status":"removed"`) {
+		t.Fatalf("the removal must be journaled: %+v", r)
+	}
+	if r := run("clean", "--rm", "--trash"); r.code != 2 {
+		t.Fatalf("--rm with --trash: %+v", r)
 	}
 }

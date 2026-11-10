@@ -41,6 +41,7 @@ type Model struct {
 	reviewSelected          map[string]bool
 	cfg                     scanner.Config
 	cleanMode               cleaner.Mode
+	scanAtStart             bool
 	freeBefore              int64
 	width, height           int
 	phase                   phase
@@ -96,7 +97,7 @@ func New(cfg scanner.Config, mode cleaner.Mode, freeBefore int64) *Model {
 	return &Model{cfg: cfg, cleanMode: mode, freeBefore: freeBefore, spin: sp, collapsed: map[string]bool{}, selected: map[string]bool{}}
 }
 func (m *Model) Init() tea.Cmd {
-	if m.explorePath != "" {
+	if m.explorePath != "" || m.scanAtStart {
 		return tea.Batch(m.spin.Tick, func() tea.Msg { return scanStartMsg{} })
 	}
 	return m.spin.Tick
@@ -764,6 +765,16 @@ func Run(cfg scanner.Config, mode cleaner.Mode, freeBefore int64) error {
 	return err
 }
 
+// RunReview opens the review list and starts the scan at once, without the
+// start screen: the user chose "Choose items" already.
+func RunReview(cfg scanner.Config, mode cleaner.Mode, freeBefore int64) error {
+	m := New(cfg, mode, freeBefore)
+	m.scanAtStart = true
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
 func (m *Model) scopeLabel() string {
 	if m.explorePath != "" {
 		return "Explore · " + condensePath(m.explorePath)
@@ -782,6 +793,8 @@ func (m *Model) actionLabel() string {
 		return "Preview only"
 	case cleaner.ModeRemove:
 		return "Permanently delete"
+	case cleaner.ModeByData:
+		return "Remove caches, Trash the rest"
 	}
 	return "Move to Trash"
 }

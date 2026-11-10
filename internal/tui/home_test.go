@@ -52,7 +52,7 @@ func TestHomeFitsEveryCheckedTerminalSize(t *testing.T) {
 func TestHomeShowsLiveNumbersAndTheHintOfTheCurrentEntry(t *testing.T) {
 	m := testHome(110, 28)
 	out := m.View()
-	for _, want := range []string{"182.00 GiB free", "of 494.00 GiB", "last cleaned 3 days ago", "312.00 GiB used", "2 actions", "Nothing is selected for you", "open Clean"} {
+	for _, want := range []string{"182.00 GiB free", "of 494.00 GiB", "last cleaned 3 days ago", "312.00 GiB used", "2 actions", "You confirm once", "open Clean"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("%q is missing in:\n%s", want, out)
 		}

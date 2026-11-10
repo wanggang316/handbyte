@@ -71,15 +71,18 @@ sudo rm "$(command -v handbyte)"
 
 ```sh
 handbyte                           # Home screen: Clean, Analyze, History
-handbyte clean                     # Review candidates in the terminal
+handbyte clean                     # Smart Clean: scan, confirm once, clean the safe items
+handbyte clean --yes               # The same without the confirmation
 handbyte clean --dry-run           # Preview; no cleanup actions
-handbyte clean --scope=quick       # Known caches and Xcode data
-handbyte clean --scope=projects    # Project artifacts only
+handbyte clean --review            # Choose the items yourself in the full list
+handbyte clean --deep              # Also scan the project roots, then choose
+handbyte clean --trash             # Move everything to the Trash, also caches
+handbyte clean --review --scope=projects    # Project artifacts only
 handbyte clean --min=200M          # Minimum candidate size
 handbyte clean --roots=~/work      # Override project roots for this scan
 handbyte clean --no-projects       # Skip project artifact discovery
 handbyte clean --json              # JSON inventory with coverage and eligibility
-handbyte clean --rm                # Explicit permanent deletion mode
+handbyte clean --rm                # Delete everything directly, not through the Trash
 handbyte analyze ~/Downloads       # Folders by size and the largest files (--json for JSON)
 handbyte history                   # Local action records (--json for JSON)
 handbyte restore ACTION_ID         # Restore a recorded Trash action
@@ -89,6 +92,13 @@ handbyte config protect ~/work/keep     # Save a protected path
 handbyte config unprotect ~/work/keep   # Remove that exact protection
 handbyte help                      # All commands and options
 ```
+
+Smart Clean shows one line for each area (Xcode build data, package
+manager caches, browser caches, app caches, logs) while it scans, then the
+total that is safe to clean, what needs review and what is skipped because
+its app runs. Enter cleans the safe items; `r` opens the full list and `d`
+adds the project roots. Data that rebuilds by itself is removed directly, so
+the freed space is real; everything else goes to the Trash.
 
 The home screen adapts to the terminal width and explains each entry. The
 review screen offers Quick cleanup, Project cleanup, and Explore storage.

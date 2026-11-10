@@ -19,6 +19,8 @@ type Preset struct {
 	Rebuildable bool
 	// Processes are executable names of the owner.
 	Processes []string
+	// OwnerName is the program that makes the data, for the screen.
+	OwnerName string
 }
 
 // ProjectArtifact is a directory name commonly produced by build systems.
@@ -69,6 +71,7 @@ func init() {
 				Area:           r.Area,
 				Rebuildable:    r.Rebuildable,
 				Processes:      r.Processes,
+				OwnerName:      r.OwnerName,
 			})
 		case catalog.KindArtifact:
 			ProjectArtifactPatterns = append(ProjectArtifactPatterns, ProjectArtifact{

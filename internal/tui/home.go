@@ -51,7 +51,7 @@ var homeEntries = []homeEntry{
 	{
 		name:    "Clean",
 		desc:    "Remove caches and build output that rebuild by themselves",
-		hint:    []string{"Scans known cache and build folders. You see every item and its cost before you choose.", "Nothing is selected for you. Items go to the Trash, so you can restore them later."},
+		hint:    []string{"Scans known cache and log folders, then shows what is safe to clean. You confirm once.", "Caches rebuild by themselves, so they are removed. Anything else goes to the Trash. Press r there to choose items yourself."},
 		action:  ActionClean,
 		primary: "open Clean",
 	},

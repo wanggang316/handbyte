@@ -36,7 +36,7 @@ const usageText = `handbyte cleans caches and build output on macOS.
 
 Usage:
   handbyte                    Home screen
-  handbyte clean              Review and clean caches and build output
+  handbyte clean              Smart Clean: scan, confirm once, clean the safe items
   handbyte analyze [path]     Folders by size and the largest files, read-only
   handbyte history            Past cleanup actions
   handbyte restore <id>       Put a Trash action back
@@ -47,9 +47,13 @@ Usage:
   handbyte version            Print the version
 
 Options of clean:
+  --review         Choose the items yourself, in the full list
+  --deep           Also scan the project roots, then choose the items
+  --yes            Clean the safe items without the confirmation
   --dry-run        Preview only; change nothing
-  --rm             Delete directly, not through the Trash (permanent)
-  --scope=<s>      all, quick or projects (default all)
+  --trash          Move everything to the Trash, also caches
+  --rm             Delete everything directly, not through the Trash
+  --scope=<s>      With --review: all, quick or projects (default all)
   --min=<size>     Drop items smaller than this, for example 200M (default 50M)
   --roots=<paths>  Project roots for this scan only
   --no-projects    Skip the project scan
@@ -58,6 +62,10 @@ Options of clean:
 
 Options of analyze and history:
   --json           Print the data as JSON
+
+By default, data that rebuilds by itself (caches, logs, build output) is
+removed directly, so the freed space is real. Everything else goes to the
+Trash.
 `
 
 // usageError is an error of the command line, not of the operation.
@@ -204,13 +212,20 @@ func cmdClean(args []string) error {
 	scan := addScanFlags(fs)
 	dryRun := fs.Bool("dry-run", false, "")
 	remove := fs.Bool("rm", false, "")
+	trash := fs.Bool("trash", false, "")
 	asJSON := fs.Bool("json", false, "")
+	review := fs.Bool("review", false, "")
+	deep := fs.Bool("deep", false, "")
+	yes := fs.Bool("yes", false, "")
 	positional, err := parse(fs, args)
 	if err != nil {
 		return err
 	}
 	if len(positional) > 0 {
 		return usageError{"clean takes no path; use: handbyte analyze " + positional[0]}
+	}
+	if *remove && *trash {
+		return usageError{"--rm and --trash exclude each other"}
 	}
 	saved, err := settings.Load()
 	if err != nil {
@@ -223,8 +238,106 @@ func cmdClean(args []string) error {
 	if *asJSON {
 		return printScan(cfg, "")
 	}
+	mode := cleanMode(*dryRun, *remove)
+	if mode == cleaner.ModeTrash && !*trash {
+		mode = cleaner.ModeByData
+	}
 	free, _ := freeBytes("/")
-	return ui.Run(cfg, cleanMode(*dryRun, *remove), free)
+	if *review || *deep {
+		if *deep {
+			cfg.Scope, cfg.SkipProjectScan = "all", false
+		}
+		return ui.RunReview(cfg, mode, free)
+	}
+
+	// Smart Clean: the known locations only, every size, safe items only.
+	smart := cfg
+	smart.Scope, smart.SkipProjectScan, smart.MinSize = "quick", true, 1<<20
+	opts := tui.SmartOptions{
+		Mode: mode,
+		Yes:  *yes,
+		Scan: func(ctx context.Context, progress chan<- scanner.Progress) ([]scanner.Item, error) {
+			return scanner.Scan(ctx, smart, progress)
+		},
+		Execute: func(ctx context.Context, items []scanner.Item, progress chan<- cleaner.Progress) []cleaner.Result {
+			return cleaner.Execute(ctx, items, cleaner.Options{Mode: mode, Exclusions: smart.Exclusions}, progress)
+		},
+		FreeBytes: func() int64 { n, _ := freeBytes("/"); return n },
+	}
+	if !interactive() {
+		return smartPlain(os.Stdout, opts)
+	}
+	next, err := tui.RunSmart(opts)
+	if err != nil {
+		return err
+	}
+	switch next {
+	case tui.SmartReview:
+		return ui.RunReview(cfg, mode, free)
+	case tui.SmartDeep:
+		cfg.Scope, cfg.SkipProjectScan = "all", false
+		return ui.RunReview(cfg, mode, free)
+	}
+	return nil
+}
+
+// smartPlain is Smart Clean without a terminal: it prints the summary and
+// cleans only with --yes.
+func smartPlain(w io.Writer, opts tui.SmartOptions) error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	items, err := opts.Scan(ctx, nil)
+	if err != nil && ctx.Err() == nil {
+		return err
+	}
+	safe := tui.SmartSelection(items)
+	var safeBytes, reviewBytes int64
+	for _, it := range safe {
+		safeBytes += it.Size
+	}
+	taken := map[string]bool{}
+	for _, it := range safe {
+		taken[it.Path] = true
+	}
+	for _, it := range items {
+		if !taken[it.Path] && it.Selectable() && it.ScanStatus == "complete" {
+			reviewBytes += it.Size
+		}
+	}
+	noun := "items"
+	if len(safe) == 1 {
+		noun = "item"
+	}
+	fmt.Fprintf(w, "Safe to clean: %s in %d %s\n", tui.Bytes(safeBytes), len(safe), noun)
+	if reviewBytes > 0 {
+		fmt.Fprintf(w, "Needs review:  %s (not included; see handbyte clean --review)\n", tui.Bytes(reviewBytes))
+	}
+	if !opts.Yes || len(safe) == 0 {
+		if len(safe) > 0 {
+			fmt.Fprintln(w, "Nothing was changed. Run handbyte clean --yes to clean the safe items.")
+		}
+		return nil
+	}
+	results := opts.Execute(ctx, safe, nil)
+	var removed, moved, previewed int64
+	failed := 0
+	for _, r := range results {
+		removed += r.Freed
+		moved += r.Moved
+		previewed += r.Previewed
+		switch r.Status {
+		case "removed", "trashed", "previewed":
+		default:
+			failed++
+			fmt.Fprintf(w, "skipped %s: %s\n", r.Path, r.Message)
+		}
+	}
+	if previewed > 0 {
+		fmt.Fprintf(w, "Preview: %s would be cleaned. Nothing was changed.\n", tui.Bytes(previewed))
+		return nil
+	}
+	fmt.Fprintf(w, "Removed %s, moved %s to the Trash, %d skipped. Details: handbyte history\n", tui.Bytes(removed), tui.Bytes(moved), failed)
+	return nil
 }
 
 func cmdAnalyze(args []string) error {

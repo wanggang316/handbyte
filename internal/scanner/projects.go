@@ -101,31 +101,10 @@ func artifactConsequence(owner, name string) string {
 }
 
 func ownerLabel(source string) string {
-	switch source {
-	case "xcode-derived", "xcode-devicesupport", "xcode-archives", "coresim-cache":
-		return "Xcode"
-	case "swiftpm-cache":
-		return "Swift Package Manager"
-	case "go-build", "go-mod-cache":
-		return "Go"
-	case "npm-cache":
-		return "npm"
-	case "yarn-cache":
-		return "Yarn"
-	case "cargo-registry", "cargo-git", "rustup":
-		return "Rust"
-	case "gradle-cache":
-		return "Gradle"
-	case "brew-cache":
-		return "Homebrew"
-	case "jetbrains":
-		return "JetBrains"
-	case "playwright":
-		return "Playwright"
-	case "cypress":
-		return "Cypress"
-	case "codex":
-		return "Codex"
+	for _, p := range Presets {
+		if p.Source == source && p.OwnerName != "" {
+			return p.OwnerName
+		}
 	}
 	return "Unknown owner"
 }
