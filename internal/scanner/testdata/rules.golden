@@ -1,0 +1,56 @@
+preset	xcode-derived	~/Library/Developer/Xcode/DerivedData	true	Xcode & iOS	safe
+preset	xcode-devicesupport	~/Library/Developer/Xcode/iOS DeviceSupport	true	Xcode & iOS	safe
+preset	xcode-devicesupport	~/Library/Developer/Xcode/watchOS DeviceSupport	true	Xcode & iOS	safe
+preset	xcode-devicesupport	~/Library/Developer/Xcode/tvOS DeviceSupport	true	Xcode & iOS	safe
+preset	xcode-archives	~/Library/Developer/Xcode/Archives	false	Xcode & iOS	caution
+preset	coresim-cache	~/Library/Developer/CoreSimulator/Caches	false	Xcode & iOS	safe
+preset	go-build	~/Library/Caches/go-build	false	Developer Caches	safe
+preset	go-mod-cache	~/go/pkg/mod/cache/download	false	Developer Caches	safe
+preset	cargo-registry	~/.cargo/registry	false	Developer Caches	safe
+preset	cargo-git	~/.cargo/git	false	Developer Caches	safe
+preset	rustup	~/.rustup/toolchains	true	Developer Caches	review
+preset	npm-cache	~/.npm/_cacache	false	Developer Caches	safe
+preset	pnpm-store	~/Library/pnpm/store	false	Developer Caches	review
+preset	yarn-cache	~/.yarn/berry/cache	false	Developer Caches	safe
+preset	yarn-cache	~/Library/Caches/Yarn	false	Developer Caches	safe
+preset	gradle-cache	~/.gradle/caches	false	Developer Caches	safe
+preset	maven-cache	~/.m2/repository	false	Developer Caches	review
+preset	swiftpm-cache	~/Library/Caches/org.swift.swiftpm	false	Developer Caches	safe
+preset	playwright	~/Library/Caches/ms-playwright	false	Developer Caches	safe
+preset	cypress	~/Library/Caches/Cypress	false	Developer Caches	safe
+preset	brew-cache	~/Library/Caches/Homebrew	false	Developer Caches	safe
+preset	jetbrains	~/Library/Caches/JetBrains	false	Developer Caches	safe
+preset	codex	~/Library/Caches/com.openai.codex	false	Developer Caches	safe
+preset	xdg-cache	~/.cache	true	Developer Caches	review
+preset	library-caches	~/Library/Caches	true	System & App Caches	safe
+preset	library-logs	~/Library/Logs	true	Trash & Logs	safe
+preset	containers	~/Library/Containers	true	System & App Caches	caution
+preset	orbstack	~/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data	false	VMs & Containers	caution
+preset	apple-container	~/Library/Application Support/com.apple.container	false	VMs & Containers	caution
+preset	claude-vm	~/Library/Application Support/Claude/vm_bundles	false	VMs & Containers	caution
+preset	docker	~/.docker	false	VMs & Containers	caution
+preset	trash	~/.Trash	false	Trash & Logs	review
+preset	downloads	~/Downloads	false	Other Large Directories	caution
+artifact	node_modules	Project Build Artifacts	review
+artifact	target	Project Build Artifacts	review
+artifact	build	Project Build Artifacts	review
+artifact	.build	Project Build Artifacts	review
+artifact	dist	Project Build Artifacts	review
+artifact	.next	Project Build Artifacts	review
+artifact	.nuxt	Project Build Artifacts	review
+artifact	.turbo	Project Build Artifacts	review
+artifact	.parcel-cache	Project Build Artifacts	review
+artifact	.gradle	Project Build Artifacts	review
+artifact	.dart_tool	Project Build Artifacts	review
+artifact	DerivedData	Project Build Artifacts	review
+artifact	Pods	Project Build Artifacts	review
+artifact	__pycache__	Project Build Artifacts	safe
+artifact	.pytest_cache	Project Build Artifacts	safe
+artifact	.mypy_cache	Project Build Artifacts	safe
+artifact	.ruff_cache	Project Build Artifacts	safe
+artifact	.venv	Project Build Artifacts	review
+artifact	venv	Project Build Artifacts	review
+root	~/dev
+root	~/Projects
+root	~/Code
+root	~/workspace
