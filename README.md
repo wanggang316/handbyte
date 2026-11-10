@@ -80,7 +80,7 @@ handbyte clean --roots=~/work      # Override project roots for this scan
 handbyte clean --no-projects       # Skip project artifact discovery
 handbyte clean --json              # JSON inventory with coverage and eligibility
 handbyte clean --rm                # Explicit permanent deletion mode
-handbyte analyze ~/Downloads       # Read-only directory explorer
+handbyte analyze ~/Downloads       # Folders by size and the largest files (--json for JSON)
 handbyte history                   # Local action records (--json for JSON)
 handbyte restore ACTION_ID         # Restore a recorded Trash action
 handbyte config                    # Show project roots and protected paths

@@ -25,6 +25,7 @@ import (
 	"github.com/wanggang316/handbyte/internal/settings"
 	"github.com/wanggang316/handbyte/internal/tui"
 	"github.com/wanggang316/handbyte/internal/ui"
+	"github.com/wanggang316/handbyte/internal/usage"
 )
 
 // version is set by the release build.
@@ -35,7 +36,7 @@ const usageText = `handbyte cleans caches and build output on macOS.
 Usage:
   handbyte                    Home screen
   handbyte clean              Review and clean caches and build output
-  handbyte analyze [path]     Browse a folder by size, read-only
+  handbyte analyze [path]     Folders by size and the largest files, read-only
   handbyte history            Past cleanup actions
   handbyte restore <id>       Put a Trash action back
   handbyte config             Show the project roots and the protected paths
@@ -235,21 +236,84 @@ func cmdAnalyze(args []string) error {
 	if len(positional) > 1 {
 		return usageError{"analyze takes one path"}
 	}
-	path := "~"
-	if len(positional) == 1 {
-		path = positional[0]
-	}
-	saved, err := settings.Load()
+	path, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	cfg := scanner.Default()
-	cfg.ProjectRoots, cfg.Exclusions = saved.Roots, saved.Exclusions
-	if *asJSON {
-		return printScan(cfg, path)
+	if len(positional) == 1 {
+		path = positional[0]
+		if path == "~" || strings.HasPrefix(path, "~/") {
+			home, _ := os.UserHomeDir()
+			path = filepath.Join(home, strings.TrimPrefix(positional[0], "~"))
+		}
 	}
-	free, _ := freeBytes("/")
-	return ui.RunExplore(cfg, cleaner.ModeTrash, free, path)
+	if *asJSON {
+		return printUsage(path)
+	}
+	return tui.RunAnalyze(path)
+}
+
+// printUsage scans a folder with the storage engine and prints the first
+// level and the largest files as JSON.
+func printUsage(path string) error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	result, err := usage.Scan(ctx, path, usage.Options{})
+	if err != nil {
+		return err
+	}
+	type child struct {
+		Name      string `json:"name"`
+		Dir       bool   `json:"is_dir"`
+		Allocated int64  `json:"allocated_bytes"`
+		Logical   int64  `json:"logical_bytes"`
+		Files     int64  `json:"file_count"`
+		Status    string `json:"status"`
+		Note      string `json:"note,omitempty"`
+	}
+	type file struct {
+		Path      string `json:"path"`
+		Allocated int64  `json:"allocated_bytes"`
+		Logical   int64  `json:"logical_bytes"`
+	}
+	status := func(n *usage.Node) string {
+		switch {
+		case n.Skipped != "":
+			return "skipped"
+		case n.Incomplete:
+			return "partial"
+		}
+		return "complete"
+	}
+	root := result.Root
+	report := struct {
+		Schema     int     `json:"schema_version"`
+		Path       string  `json:"path"`
+		Status     string  `json:"status"`
+		Allocated  int64   `json:"allocated_bytes"`
+		Logical    int64   `json:"logical_bytes"`
+		Files      int64   `json:"file_count"`
+		OtherFiles int64   `json:"other_file_count"`
+		OtherBytes int64   `json:"other_allocated_bytes"`
+		Children   []child `json:"children"`
+		Largest    []file  `json:"largest_files"`
+	}{1, result.Path, status(root), root.Allocated, root.Logical, root.Files, root.OtherFiles, root.OtherAllocated, []child{}, []file{}}
+	if result.Cancelled {
+		report.Status = "cancelled"
+	}
+	for _, n := range root.Children {
+		note := n.Skipped
+		if note == "" {
+			note = n.Err
+		}
+		report.Children = append(report.Children, child{n.Name, n.Dir, n.Allocated, n.Logical, n.Files, status(n), note})
+	}
+	for _, f := range result.Largest {
+		report.Largest = append(report.Largest, file{f.Path, f.Allocated, f.Logical})
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(report)
 }
 
 func cmdHistory(args []string) error {

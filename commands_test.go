@@ -103,9 +103,47 @@ func TestCommandsCoverTheOldFlags(t *testing.T) {
 		t.Fatalf("restore of an unknown ID must fail: %+v", r)
 	}
 
-	r = run("analyze", root, "--json")
-	if err := json.Unmarshal([]byte(r.stdout), &scan); err != nil || r.code != 0 || len(scan.Items) != 1 {
+}
+
+func TestAnalyzeJSONReportsTheTree(t *testing.T) {
+	run, home := buildCLI(t)
+	root, target := rustProject(t, home)
+	if err := os.WriteFile(filepath.Join(target, "binary"), make([]byte, 20000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var report struct {
+		Schema    int    `json:"schema_version"`
+		Path      string `json:"path"`
+		Status    string `json:"status"`
+		Allocated int64  `json:"allocated_bytes"`
+		Logical   int64  `json:"logical_bytes"`
+		Files     int64  `json:"file_count"`
+		Children  []struct {
+			Name      string `json:"name"`
+			Dir       bool   `json:"is_dir"`
+			Allocated int64  `json:"allocated_bytes"`
+			Files     int64  `json:"file_count"`
+		} `json:"children"`
+		Largest []struct {
+			Path      string `json:"path"`
+			Allocated int64  `json:"allocated_bytes"`
+		} `json:"largest_files"`
+	}
+	r := run("analyze", root, "--json")
+	if err := json.Unmarshal([]byte(r.stdout), &report); err != nil || r.code != 0 {
 		t.Fatalf("analyze --json: %v %+v", err, r)
+	}
+	if report.Schema != 1 || report.Status != "complete" || report.Files != 2 || report.Logical != 20009 {
+		t.Fatalf("unexpected report: %+v", report)
+	}
+	if len(report.Children) != 1 || report.Children[0].Name != "example" || !report.Children[0].Dir || report.Children[0].Files != 2 {
+		t.Fatalf("children: %+v", report.Children)
+	}
+	if len(report.Largest) != 2 || !strings.HasSuffix(report.Largest[0].Path, "example/target/binary") {
+		t.Fatalf("largest files: %+v", report.Largest)
+	}
+	if r := run("analyze", filepath.Join(home, "missing"), "--json"); r.code != 1 || r.stderr == "" {
+		t.Fatalf("a missing path must fail: %+v", r)
 	}
 }
 
