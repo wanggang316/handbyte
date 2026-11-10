@@ -623,8 +623,16 @@ Step 3, Clean, 2026-11-10:
 - System rules (`catalog/system.json`): system crash reports older than 30
   days and rotated system logs older than 7 days, as fixed `find` commands.
   The CLI runs them with `sudo` (`handbyte clean --system`), the app after
-  the administrator dialog. Not done: `/Library/Caches`, update files and
-  the unified log store; they need more than an age and a name pattern.
+  the administrator dialog. Added later on 2026-11-10: logs in
+  `/Library/Logs` older than 30 days (safe), and the unified log as a
+  review rule with the fixed command `log erase --all` (a command rule must
+  be in the allowed list of `catalog/system.go`). The review rule is never
+  part of Smart Clean or `--yes`; the CLI asks for it by name, the app shows
+  it apart with Erase and its own confirmation.
+- Not done, with the reason: `/Library/Caches` holds only folders of macOS
+  on the test Mac, and no rule is added without a fixture from a real
+  folder. `/Library/Updates` has the SIP `restricted` flag, so no tool can
+  clean it; "Install macOS" apps are apps and show in Apps.
 
 Step 4, Apps, 2026-11-10:
 
@@ -643,9 +651,24 @@ Step 4, Apps, 2026-11-10:
 - Leftovers: folders (and `.plist` files in Preferences) named by a bundle
   ID whose vendor, vendor word and app name match no installed app, without
   UUIDs and shared libraries. Review only, nothing selected.
-- Not done: background items and system extensions of an app, signing
-  team, items in `/Library` that need admin rights, `brew uninstall` run by
-  the tool itself.
+- Added later on 2026-11-10: launchd jobs of an app (the bundle ID in
+  `AssociatedBundleIdentifiers` or a program inside the bundle) with their
+  helper in `/Library/PrivilegedHelperTools`; group containers of the
+  signing team when no other installed app has the team (CLI:
+  `codesign -dv`, app: `SecStaticCode`); files in `/Library` from
+  `systemLocations`, listed as root items and never removed; an app with a
+  system extension is refused; `handbyte uninstall --brew` and the app's
+  "Uninstall with Homebrew" run `brew uninstall --cask` after a
+  confirmation and journal the removal. Shared cases:
+  `apps/background.json`, `apps/shared-team.json`.
+- One journal for both products:
+  `~/Library/Application Support/handbyte/actions.jsonl`, the JSON record
+  of the CLI with `Rule` and `Tool`. The app reads the state of each action
+  from it, restores by ID or by group and checks the Trash identity. Shared
+  case: `journal/history.json`. The old app log is shown without Restore.
+- Not done: removal of root items by the tool (the user removes them in
+  Finder; the design allows it with one-time authorization, but a launch
+  daemon also needs `launchctl bootout`, and that was not tested live).
 
 Step 5, Finish, 2026-11-10:
 
