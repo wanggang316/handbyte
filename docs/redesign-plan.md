@@ -554,6 +554,22 @@ Step 1, Foundation, 2026-11-10:
   description.
 - Logo B1 in the app icon, the favicon, the website header and the terminal.
 
+Step 2, Storage, 2026-11-10 (first part):
+
+- Scan engine in both products (`internal/usage`, `HandbyteCore/Usage.swift`)
+  with a shared conformance case. It reads with `readdir` and `lstat`, walks
+  in parallel, counts a file with several names once, does not follow
+  symbolic links, does not enter other volumes or dataless folders, and marks
+  the parents of an unreadable folder. On `/opt/homebrew` (167,000 files)
+  both report the same totals in about 0.6 s (Swift: release build).
+- CLI: `handbyte analyze` shows running totals, then the drill-down with a
+  detail pane on a wide terminal, and the largest files. `--json` prints the
+  first level and the largest files.
+- App: the Storage section with running totals, a treemap with a side list,
+  the largest files, and "Review in Clean" for a folder that a rule covers.
+- Not done: `getattrlistbulk` and clone counting, categories, the result
+  cache, the collector, the volume overview with purgeable space.
+
 Not done in step 1: the terminal screens were checked by tests at 58x20,
 80x24, 110x28 and 160x45 without color, and by one run in a pseudo terminal;
 a light terminal theme was not checked. The app was checked by screenshots of
