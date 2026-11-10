@@ -472,37 +472,28 @@ keyboard path and a context menu entry.
 
 ### Logo
 
-Direction: **two capsule bars**, one above the other. The top bar is the
-disk before: ink, almost full. The bottom bar is the disk after: a short ink
-part, and the rest is free. The logo is the product's own progress bar. The
-first three directions (Bite, letter h, Trim) were set aside as too
-abstract; the canvas keeps them small for comparison.
+Direction: **"Bite"**. It is a rounded block of storage with a round bite
+out of the top right corner, and a green rounded square in the bite: the
+byte that left. It shows freed space without a broom or a disk, and the word
+"bite" echoes "byte".
 
-The first drawings (D1 to D3) were too heavy: the bars filled the icon, and
-black touched a bright green. The canvas now shows three lighter drawings:
+The first drawing had a small byte that went over the outline of the block.
+That is the shape of an unread badge. The canvas shows two larger drawings:
 
-- **E1, Balanced** (recommended): medium bars on pale tracks. The mark
-  fills about two thirds of the icon. One color for each bar: the top fill
-  is ink, the bottom fill is green.
-- **E2, Light**: thinner and smaller bars, and all colors move a little to
-  green. The lightest. Small in the Dock.
-- **E3, Bare**: no tracks, one long ink capsule and one short green capsule.
-  The clearest at 16 px, but it shows "long and short", not "full and free".
+- **A1, Larger** (recommended): bite radius 24 and byte 17 on a 64 grid
+  (before: 17 and 12). The byte stays inside the outline of the block.
+- **A2, Largest**: bite radius 27 and byte 19. The clearest byte at 16 px,
+  but the block starts to lose its square shape.
 
-Colors for E1 and E3: ink `#1b1d1c`, paper `#f6f6f3`, green `#2fb47c` on
-light and `#6fdcab` on dark. If this green is chosen, the `brand` token of
-the design system changes to it.
+Other directions were tried and set aside: a letter h, three trimmed rows,
+and two capsule bars (before and after).
 
-Rules for all drawings:
-
-- Colors: soft ink, off-white paper and one green of low saturation. No
-  gradient. No two strong colors touch.
-- App icon: the mark in white and green on an ink squircle. A light variant
-  is in the canvas.
+- Colors: ink and one green. No gradient.
+- App icon: the mark in white on an ink squircle. A light variant is in the
+  canvas.
 - Wordmark: the mark, then "handbyte" in lower case, weight 650, tight
   tracking.
-- Terminal: two lines of six cells made from `━` and `─`, the same glyphs
-  as the progress line. One-line contexts use the name only.
+- Terminal: two cells, `▙▝`, then the name in bold.
 
 After the choice, redraw `scripts/render-app-icon.swift`, the favicon and the
 website header.
@@ -556,7 +547,7 @@ Decided on 2026-11-10:
   rights.
 - **Storage view in the app.** Treemap with a side list.
 - **Sequence.** Storage before Clean and Apps.
-- **Logo direction.** Two capsule bars. Directions A to C are set aside.
+- **Logo direction.** "Bite", with a larger bite and byte.
 - **Removal mode.** By data class, as in "Removal mode": direct removal for
   rebuildable items, the Trash for all other items, `--trash` as the option.
 - **Admin rights.** One-time authorization in both products. No installed
@@ -564,4 +555,4 @@ Decided on 2026-11-10:
 
 Open:
 
-1. **Logo drawing.** Proposed: E1. Alternatives: E2, E3.
+1. **Logo drawing.** Proposed: A1. Alternative: A2.
