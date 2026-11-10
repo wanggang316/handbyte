@@ -55,8 +55,8 @@ preset	vscode-cache	~/Library/Application Support/Code/GPUCache	false	Developer 
 preset	xcode-doc-cache	~/Library/Developer/Xcode/DocumentationCache	false	Xcode & iOS	safe	xcode	rebuildable=true	Xcode
 preset	xcode-device-logs	~/Library/Developer/Xcode/iOS Device Logs	false	Xcode & iOS	safe	logs	rebuildable=true	Xcode
 preset	crash-reports	~/Library/Logs/DiagnosticReports	false	Trash & Logs	safe	logs	rebuildable=true	ReportCrash
-preset	device-firmware	~/Library/iTunes/iPhone Software Updates	false	Other Large Directories	safe	files	rebuildable=true	Music,AMPDevicesAgent
-preset	device-firmware	~/Library/iTunes/iPad Software Updates	false	Other Large Directories	safe	files	rebuildable=true	Music,AMPDevicesAgent
+preset	device-firmware	~/Library/iTunes/iPhone Software Updates	false	Other Large Directories	safe	files	rebuildable=true	AMPDevicesAgent,MobileDeviceUpdater
+preset	device-firmware	~/Library/iTunes/iPad Software Updates	false	Other Large Directories	safe	files	rebuildable=true	AMPDevicesAgent,MobileDeviceUpdater
 preset	ios-backups	~/Library/Application Support/MobileSync/Backup	true	Other Large Directories	review	files	rebuildable=false	AMPDevicesAgent,MobileDeviceUpdater
 preset	mail-downloads	~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads	false	Other Large Directories	review	files	rebuildable=false	Mail
 preset	spotify-cache	~/Library/Caches/com.spotify.client	false	System & App Caches	safe	apps	rebuildable=true	Spotify,Spotify Helper
