@@ -5,23 +5,39 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 //go:embed system.json
 var systemJSON []byte
 
-// SystemRule is a cleanup of files that belong to root. It names a fixed
-// folder, file name patterns and a minimum age: the cleanup removes only
-// regular files that match all three, so it is one fixed command.
+// SystemRule is a cleanup of files that belong to root. Most rules name a
+// fixed folder, file name patterns and a minimum age: the cleanup removes
+// only regular files that match all three, so it is one fixed find
+// command. A rule with a Command runs a tool of macOS instead, from the
+// fixed list allowedCommands, and Measure names the folders it empties.
 type SystemRule struct {
 	ID         string   `json:"id"`
 	Title      string   `json:"title"`
 	Root       string   `json:"root"`
-	Names      []string `json:"names"`
-	MinAgeDays int      `json:"minAgeDays"`
+	Names      []string `json:"names,omitempty"`
+	MinAgeDays int      `json:"minAgeDays,omitempty"`
 	Summary    string   `json:"summary"`
 	Recovery   string   `json:"recovery"`
+	// Tier is "safe" (the default) or "review". Smart Clean takes only safe
+	// rules; a review rule needs its own confirmation.
+	Tier    string   `json:"tier,omitempty"`
+	Command []string `json:"command,omitempty"`
+	Measure []string `json:"measure,omitempty"`
+}
+
+// Review reports whether the rule needs its own confirmation.
+func (r SystemRule) Review() bool { return r.Tier == "review" }
+
+// allowedCommands are the only tools a system rule can run.
+var allowedCommands = [][]string{
+	{"/usr/bin/log", "erase", "--all"},
 }
 
 // System is the content of system.json.
@@ -60,8 +76,20 @@ func ParseSystem(data []byte) (System, error) {
 			return System{}, fmt.Errorf("system rule %q is empty or repeated", r.ID)
 		case !filepath.IsAbs(r.Root) || filepath.Clean(r.Root) != r.Root || r.Root == "/" || strings.HasPrefix(r.Root, "/Users") || strings.HasPrefix(r.Root, "/System"):
 			return System{}, fmt.Errorf("system rule %s: the root %q is not allowed", r.ID, r.Root)
-		case len(r.Names) == 0 || r.MinAgeDays < 1 || r.Summary == "" || r.Recovery == "":
-			return System{}, fmt.Errorf("system rule %s: names, a minimum age, summary and recovery are required", r.ID)
+		case r.Summary == "" || r.Recovery == "":
+			return System{}, fmt.Errorf("system rule %s: summary and recovery are required", r.ID)
+		case r.Tier != "" && r.Tier != "safe" && r.Tier != "review":
+			return System{}, fmt.Errorf("system rule %s: unknown tier %q", r.ID, r.Tier)
+		}
+		if len(r.Command) > 0 {
+			if err := checkCommandRule(r); err != nil {
+				return System{}, err
+			}
+			ids[r.ID] = true
+			continue
+		}
+		if len(r.Names) == 0 || r.MinAgeDays < 1 || len(r.Measure) > 0 {
+			return System{}, fmt.Errorf("system rule %s: names and a minimum age are required", r.ID)
 		}
 		for _, n := range r.Names {
 			if !strings.HasPrefix(n, "*.") || strings.ContainsAny(n[2:], `*?[]/ '"\`) {
@@ -71,4 +99,29 @@ func ParseSystem(data []byte) (System, error) {
 		ids[r.ID] = true
 	}
 	return s, nil
+}
+
+// checkCommandRule keeps a command rule to a tool of the fixed list, a
+// review tier and measure folders below /private/var/db.
+func checkCommandRule(r SystemRule) error {
+	allowed := false
+	for _, c := range allowedCommands {
+		if slices.Equal(c, r.Command) {
+			allowed = true
+		}
+	}
+	switch {
+	case !allowed:
+		return fmt.Errorf("system rule %s: the command is not in the allowed list", r.ID)
+	case r.Tier != "review":
+		return fmt.Errorf("system rule %s: a command rule must have the review tier", r.ID)
+	case len(r.Names) > 0 || r.MinAgeDays != 0 || len(r.Measure) == 0:
+		return fmt.Errorf("system rule %s: a command rule has measure folders and no names", r.ID)
+	}
+	for _, m := range r.Measure {
+		if filepath.Clean(m) != m || !strings.HasPrefix(m, "/private/var/db/") {
+			return fmt.Errorf("system rule %s: the measure folder %q is not allowed", r.ID, m)
+		}
+	}
+	return nil
 }

@@ -294,6 +294,9 @@ func cmdClean(args []string) error {
 		SystemBytes: func() int64 {
 			var total int64
 			for _, r := range catalog.LoadSystem().Rules {
+				if r.Review() {
+					continue
+				}
 				total += system.MeasureRule(r, "", time.Now()).Bytes
 			}
 			return total
@@ -331,7 +334,7 @@ func cmdClean(args []string) error {
 // cleanSystem removes the old files of the system rules. They belong to
 // root, so the command runs through sudo, which asks for the password once.
 func cleanSystem(dryRun, yes bool) error {
-	var rules []catalog.SystemRule
+	var rules, review []catalog.SystemRule
 	var total int64
 	for _, r := range catalog.LoadSystem().Rules {
 		m := system.MeasureRule(r, "", time.Now())
@@ -339,13 +342,20 @@ func cleanSystem(dryRun, yes bool) error {
 		if m.Partial {
 			note = "  (some folders could not be read; more may be removed)"
 		}
-		fmt.Printf("%-32s %6d files %10s%s\n", r.Title, m.Files, tui.Bytes(m.Bytes), note)
-		if m.Files > 0 || m.Partial {
-			rules = append(rules, r)
+		if r.Review() {
+			note += "  needs review"
 		}
-		total += m.Bytes
+		fmt.Printf("%-36s %6d files %10s%s\n", r.Title, m.Files, tui.Bytes(m.Bytes), note)
+		switch {
+		case m.Files == 0 && !m.Partial:
+		case r.Review():
+			review = append(review, r)
+		default:
+			rules = append(rules, r)
+			total += m.Bytes
+		}
 	}
-	if len(rules) == 0 {
+	if len(rules) == 0 && len(review) == 0 {
 		fmt.Println("Nothing to clean.")
 		return nil
 	}
@@ -353,21 +363,45 @@ func cleanSystem(dryRun, yes bool) error {
 		fmt.Println("Preview only. Nothing was changed.")
 		return nil
 	}
-	if !yes {
-		if !interactive() {
-			fmt.Println("Nothing was changed. Run with --yes to clean; sudo must not need a password then.")
+	if !interactive() {
+		if !yes || len(rules) == 0 {
+			fmt.Println("Nothing was changed. Run with --yes to clean; sudo must not need a password then. Items that need review are cleaned only in a terminal.")
 			return nil
 		}
-		fmt.Printf("Remove %s of old system logs? macOS asks for your password. [y/N] ", tui.Bytes(total))
+		removed, err := system.Clean(context.Background(), rules, true)
+		fmt.Printf("Removed %d files.\n", removed)
+		return err
+	}
+	ask := func(question string) bool {
+		fmt.Print(question + " [y/N] ")
 		var answer string
 		fmt.Scanln(&answer)
-		if answer != "y" && answer != "Y" {
-			fmt.Println("Nothing was changed.")
-			return nil
+		return answer == "y" || answer == "Y"
+	}
+	var chosen []catalog.SystemRule
+	if len(rules) > 0 && (yes || ask(fmt.Sprintf("Remove %s of old system logs? macOS asks for your password.", tui.Bytes(total)))) {
+		chosen = append(chosen, rules...)
+	}
+	// A review rule is never taken by --yes: it removes data that a
+	// diagnosis can need, so it is asked for by name.
+	for _, r := range review {
+		fmt.Printf("\n%s: %s\n%s\n", r.Title, r.Summary, r.Recovery)
+		if ask("Run " + strings.Join(system.Command(r), " ") + " as root?") {
+			chosen = append(chosen, r)
 		}
 	}
-	removed, err := system.Clean(context.Background(), rules, !interactive())
-	fmt.Printf("Removed %d files.\n", removed)
+	if len(chosen) == 0 {
+		fmt.Println("Nothing was changed.")
+		return nil
+	}
+	removed, err := system.Clean(context.Background(), chosen, false)
+	fmt.Printf("Removed %d files", removed)
+	for _, r := range chosen {
+		if r.Review() && err == nil {
+			fmt.Printf("; %s: done", r.Title)
+		}
+	}
+	fmt.Println(".")
 	return err
 }
 

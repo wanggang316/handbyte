@@ -87,3 +87,43 @@ func TestCommandIsFixedAndRunsAsPlannedOnAFolder(t *testing.T) {
 		t.Fatalf("left: %v", names)
 	}
 }
+
+func TestACommandRuleMeasuresItsFoldersAndRunsItsCommand(t *testing.T) {
+	var rule catalog.SystemRule
+	for _, r := range catalog.LoadSystem().Rules {
+		if r.ID == "system-unified-log" {
+			rule = r
+		}
+	}
+	if !rule.Review() || strings.Join(Command(rule), " ") != "/usr/bin/log erase --all" {
+		t.Fatalf("rule: %+v", rule)
+	}
+	if s := ShellCommand(rule); s != "'/usr/bin/log' 'erase' '--all'" {
+		t.Fatalf("shell command: %s", s)
+	}
+	root := t.TempDir()
+	for _, name := range []string{"Persist/a.tracev3", "Special/b.tracev3"} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, make([]byte, 5000), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if m := MeasureRule(rule, root, time.Now()); m.Files != 2 || m.Bytes < 10000 {
+		t.Fatalf("measure: %+v", m)
+	}
+}
+
+func TestTheCatalogRefusesCommandsOutsideTheList(t *testing.T) {
+	for _, rule := range []string{
+		`{"id":"x","title":"x","root":"/private/var/db/x","summary":"s","recovery":"r","tier":"review","command":["/bin/rm","-rf","/"],"measure":["/private/var/db/x"]}`,
+		`{"id":"x","title":"x","root":"/private/var/db/x","summary":"s","recovery":"r","command":["/usr/bin/log","erase","--all"],"measure":["/private/var/db/x"]}`,
+		`{"id":"x","title":"x","root":"/private/var/db/x","summary":"s","recovery":"r","tier":"review","command":["/usr/bin/log","erase","--all"],"measure":["/Users/a"]}`,
+	} {
+		if _, err := catalog.ParseSystem([]byte(`{"version":1,"rules":[` + rule + `]}`)); err == nil {
+			t.Errorf("accepted: %s", rule)
+		}
+	}
+}

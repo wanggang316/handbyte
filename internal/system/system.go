@@ -38,15 +38,38 @@ func matches(name string, patterns []string) bool {
 }
 
 // MeasureRule counts the regular files the rule would remove. root replaces
-// the rule root, for tests; empty uses the rule root.
+// the rule root (or the measure folders of a command rule), for tests;
+// empty uses the rule.
 func MeasureRule(rule catalog.SystemRule, root string, now time.Time) Measure {
+	if len(rule.Command) > 0 {
+		folders := rule.Measure
+		if root != "" {
+			folders = []string{root}
+		}
+		m := Measure{Rule: rule}
+		for _, f := range folders {
+			part := walk(f, func(fs.DirEntry, os.FileInfo) bool { return true })
+			m.Files, m.Bytes, m.Partial = m.Files+part.Files, m.Bytes+part.Bytes, m.Partial || part.Partial
+		}
+		return m
+	}
 	if root == "" {
 		root = rule.Root
 	}
-	m := Measure{Rule: rule}
 	// find -mtime +N takes files older than N whole days, so at least
 	// N+1 days.
 	limit := now.Add(-time.Duration(rule.MinAgeDays+1) * 24 * time.Hour)
+	m := walk(root, func(d fs.DirEntry, info os.FileInfo) bool {
+		return matches(d.Name(), rule.Names) && info.ModTime().Before(limit)
+	})
+	m.Rule = rule
+	return m
+}
+
+// walk counts the regular files below root that take passes, on the volume
+// of root.
+func walk(root string, take func(fs.DirEntry, os.FileInfo) bool) Measure {
+	var m Measure
 	var device uint64
 	if info, err := os.Lstat(root); err == nil {
 		if st, ok := info.Sys().(*syscall.Stat_t); ok {
@@ -74,7 +97,7 @@ func MeasureRule(rule catalog.SystemRule, root string, now time.Time) Measure {
 			}
 			return nil
 		}
-		if !info.Mode().IsRegular() || !matches(d.Name(), rule.Names) || !info.ModTime().Before(limit) {
+		if !info.Mode().IsRegular() || !take(d, info) {
 			return nil
 		}
 		m.Files++
@@ -88,10 +111,13 @@ func MeasureRule(rule catalog.SystemRule, root string, now time.Time) Measure {
 	return m
 }
 
-// Command is the fixed command that removes the files of a rule: regular
-// files that match a pattern and are older than the minimum age, on the
-// volume of the root. find does not follow symbolic links.
+// Command is the fixed command of a rule. For a find rule it removes
+// regular files that match a pattern and are older than the minimum age, on
+// the volume of the root; find does not follow symbolic links.
 func Command(rule catalog.SystemRule) []string {
+	if len(rule.Command) > 0 {
+		return rule.Command
+	}
 	args := []string{"/usr/bin/find", rule.Root, "-xdev", "-type", "f", "("}
 	for i, n := range rule.Names {
 		if i > 0 {
@@ -133,7 +159,9 @@ func Clean(ctx context.Context, rules []catalog.SystemRule, noPrompt bool) (int,
 		}
 		cmd.Stderr = os.Stderr
 		out, err := cmd.Output()
-		removed += strings.Count(string(out), "\n")
+		if len(r.Command) == 0 {
+			removed += strings.Count(string(out), "\n")
+		}
 		if err != nil {
 			return removed, errors.New(r.Title + ": " + err.Error())
 		}
