@@ -133,6 +133,9 @@
     "com.amplitude",
     "com.plausiblelabs",
     "KSCrash",
-    "SentryCrash"
+    "SentryCrash",
+    "org.swift.swiftpm",
+    "org.webkit.Playwright",
+    "org.chromium.Chromium"
   ]
 }
