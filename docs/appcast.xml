@@ -25,7 +25,7 @@
 - **In-app updates.** Handbyte checks for new versions and installs them with
   Sparkle.
 ]]></description>
-            <enclosure url="https://github.com/wanggang316/handbyte/releases/download/app/v0.1.0/Handbyte-0.1.0.dmg" length="3492007" type="application/octet-stream" sparkle:edSignature="fA9qP9usj68/w1HQ7fK5nhP+IFGbAyqiKQDXFpR33KUas562AgKiYfx7stEN0MRJrhUH3328L/I8cNNELXFQBA=="/>
+            <enclosure url="https://github.com/wanggang316/handbyte-macos/releases/download/v0.1.0/Handbyte-0.1.0.dmg" length="3491984" type="application/octet-stream" sparkle:edSignature="bZVjqdYkPpNleKe2ltF+VQNLcvLj5UJ6pRNiSCPXhUHSG8M4JIrllKT8mgG1nevyCcXQLcUP3XeYeYgb7QG3Bw=="/>
         </item>
     </channel>
 </rss>
