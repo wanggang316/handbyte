@@ -130,7 +130,9 @@ func TestInventoryReadsBundlesSourcesAndRunningState(t *testing.T) {
 	opts := Options{
 		Roots:     []string{root},
 		Caskrooms: []string{caskroom},
-		Processes: func() []string { return []string{filepath.Join(root, "Plain.app/Contents/MacOS/run"), "/usr/bin/other"} },
+		Processes: func() []string {
+			return []string{filepath.Join(root, "Plain.app/Contents/MacOS/run"), "/usr/bin/other"}
+		},
 	}
 	apps, err := Inventory(t.Context(), opts)
 	if err != nil {

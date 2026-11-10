@@ -227,3 +227,40 @@ func TestCleanWithoutATerminalPrintsTheSummaryAndCleansWithYes(t *testing.T) {
 		t.Fatalf("--rm with --trash: %+v", r)
 	}
 }
+
+func TestUninstallWithoutATerminalShowsThePlanAndPreviews(t *testing.T) {
+	run, home := buildCLI(t)
+	bundle := filepath.Join(home, "Applications", "Fake Notes.app", "Contents")
+	if err := os.MkdirAll(filepath.Join(bundle, "MacOS"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	plist := `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>net.handbytetest.FakeNotes</string><key>CFBundleExecutable</key><string>run</string></dict></plist>`
+	if err := os.WriteFile(filepath.Join(bundle, "Info.plist"), []byte(plist), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"Library/Caches/net.handbytetest.FakeNotes/c", "Library/Application Support/net.handbytetest.FakeNotes/db"} {
+		if err := os.MkdirAll(filepath.Join(home, filepath.Dir(p)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, p), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := run("uninstall", "Fake Notes")
+	if r.code != 0 || !strings.Contains(r.stdout, "cache     high     move") || !strings.Contains(r.stdout, "data      high     keep") || !strings.Contains(r.stdout, "Nothing was changed") {
+		t.Fatalf("plan: %+v", r)
+	}
+	r = run("uninstall", "net.handbytetest.FakeNotes", "--with-data", "--dry-run")
+	if r.code != 0 || !strings.Contains(r.stdout, "data      high     move") || !strings.Contains(r.stdout, "Preview: 3 items would move") {
+		t.Fatalf("dry run: %+v", r)
+	}
+	if _, err := os.Stat(bundle); err != nil {
+		t.Fatal("a preview must not move the app")
+	}
+	if r := run("uninstall", "No Such App"); r.code != 1 || !strings.Contains(r.stderr, "no app named") {
+		t.Fatalf("unknown app: %+v", r)
+	}
+	if r := run("uninstall"); r.code != 2 {
+		t.Fatalf("no app: %+v", r)
+	}
+}

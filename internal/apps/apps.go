@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/wanggang316/handbyte/catalog"
@@ -114,7 +115,8 @@ func Inventory(ctx context.Context, opts Options) ([]App, error) {
 			continue
 		}
 		for _, e := range entries {
-			if !strings.HasSuffix(e.Name(), ".app") || e.Type()&os.ModeSymlink != 0 || !e.IsDir() {
+			// A name that starts with a dot is a hidden helper, not an app the user installed.
+			if !strings.HasSuffix(e.Name(), ".app") || strings.HasPrefix(e.Name(), ".") || e.Type()&os.ModeSymlink != 0 || !e.IsDir() {
 				continue
 			}
 			path := filepath.Join(root, e.Name())
@@ -355,4 +357,52 @@ func KnownBundleIDs(apps []App) []string {
 	}
 	sort.Strings(list)
 	return list
+}
+
+// MeasureSizes measures the bundles of apps in place, a few at a time, and
+// calls done after each one. It is for a list that shows first and fills
+// in the sizes.
+func MeasureSizes(ctx context.Context, apps []App, done func(index int, size int64)) {
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+	for i := range apps {
+		wg.Add(1)
+		go func(i int, path string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if ctx.Err() != nil {
+				return
+			}
+			if r, err := usage.Scan(ctx, path, usage.Options{Workers: 2, LargestFiles: 1, FilesPerDir: 1}); err == nil && !r.Cancelled {
+				done(i, r.Root.Allocated)
+			}
+		}(i, apps[i].Path)
+	}
+	wg.Wait()
+}
+
+// MeasureRelated fills in the sizes of related files.
+func MeasureRelated(ctx context.Context, files []Related) {
+	for i := range files {
+		if !files[i].IsDir {
+			if info, err := os.Lstat(files[i].Path); err == nil {
+				if st, ok := info.Sys().(*syscall.Stat_t); ok {
+					files[i].Size = st.Blocks * 512
+				} else {
+					files[i].Size = info.Size()
+				}
+			}
+			continue
+		}
+		if r, err := usage.Scan(ctx, files[i].Path, usage.Options{Workers: 2, LargestFiles: 1, FilesPerDir: 1}); err == nil {
+			files[i].Size = r.Root.Allocated
+		}
+	}
+}
+
+// Unused reports whether an app was not opened for six months. An app
+// without a known date is not called unused.
+func (a App) Unused(now time.Time) bool {
+	return a.LastUsedKnown && now.Sub(a.LastUsed) > 182*24*time.Hour
 }

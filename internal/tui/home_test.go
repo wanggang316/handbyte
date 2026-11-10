@@ -73,10 +73,11 @@ func TestNarrowHomeMovesTheHintToTheStatusLine(t *testing.T) {
 func TestHomeKeys(t *testing.T) {
 	m := testHome(110, 28)
 	press(m, "down")
-	if cmd := press(m, "enter"); cmd != nil || m.notice == "" {
-		t.Fatalf("a planned entry must stay on the home screen with a notice")
+	if cmd := press(m, "enter"); cmd == nil || m.Choice != ActionApps {
+		t.Fatalf("enter on Apps: choice %d", m.Choice)
 	}
-	press(m, "down")
+	m = testHome(110, 28)
+	press(m, "3")
 	if cmd := press(m, "enter"); cmd == nil || m.Choice != ActionAnalyze {
 		t.Fatalf("enter on Analyze: choice %d", m.Choice)
 	}

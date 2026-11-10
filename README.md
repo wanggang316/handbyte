@@ -84,6 +84,10 @@ handbyte clean --no-projects       # Skip project artifact discovery
 handbyte clean --json              # JSON inventory with coverage and eligibility
 handbyte clean --rm                # Delete everything directly, not through the Trash
 handbyte analyze ~/Downloads       # Folders by size and the largest files (--json for JSON)
+handbyte apps                      # Apps by size and last use; uninstall; leftovers
+handbyte apps --unused --json      # Apps not opened for six months, as JSON
+handbyte uninstall Slack           # Review an app and its files, then move them to the Trash
+handbyte uninstall Slack --reset   # Keep the app, remove its files
 handbyte history                   # Local action records (--json for JSON)
 handbyte restore ACTION_ID         # Restore a recorded Trash action
 handbyte config                    # Show project roots and protected paths
@@ -112,6 +116,18 @@ picked items. They go to the Trash only, and each move is recorded, so
 `handbyte restore` puts it back. A folder that a cleanup rule covers points
 to `handbyte clean` instead. Standard folders such as `~/Documents` and
 private data such as `~/Library/Keychains` cannot be picked.
+
+`handbyte apps` lists the apps in `/Applications` and `~/Applications` with
+the source (App Store, Homebrew, Setapp, direct), the last use that Spotlight
+knows ("unknown" is not "never"), the architectures and the size. An
+uninstall review lists the files the app keeps in `~/Library`: a match by
+bundle ID is high, a match by the app name or by the Homebrew cask is medium,
+and a dot folder is low. Caches, logs and state are selected; the app's own
+data only with `--with-data`. The app and its files go to the Trash as one
+group, and `handbyte restore <group>` puts all of them back. Apps of macOS
+are not offered, a running app must quit first, and an app from Homebrew
+points to `brew uninstall --cask`. The Leftovers filter lists data of apps
+that are no longer installed, for review only.
 
 The options of earlier releases without a command (`handbyte --dry-run`,
 `--scan-only`, `--explore`, `--history`, `--restore`, `--protect`,

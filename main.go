@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/wanggang316/handbyte/catalog"
+	"github.com/wanggang316/handbyte/internal/apps"
 	"github.com/wanggang316/handbyte/internal/cleaner"
 	"github.com/wanggang316/handbyte/internal/scanner"
 	"github.com/wanggang316/handbyte/internal/settings"
@@ -38,6 +40,8 @@ Usage:
   handbyte                    Home screen
   handbyte clean              Smart Clean: scan, confirm once, clean the safe items
   handbyte analyze [path]     Folders by size and the largest files, read-only
+  handbyte apps               Apps by size and last use; uninstall them; leftovers
+  handbyte uninstall <app>    Review an app and its files, then move them to the Trash
   handbyte history            Past cleanup actions
   handbyte restore <id>       Put a Trash action back
   handbyte config             Show the project roots and the protected paths
@@ -59,6 +63,17 @@ Options of clean:
   --no-projects    Skip the project scan
   --workers=<n>    Concurrent scan workers (default 6)
   --json           Print the scan as JSON and do not clean
+
+Options of apps:
+  --unused         Only apps not opened for six months
+  --leftovers      Data of apps that are no longer installed
+  --json           Print the data as JSON
+
+Options of uninstall:
+  --with-data      Also select the app's own data (documents, databases)
+  --reset          Keep the app; remove only its files
+  --dry-run        Show what would move; change nothing
+  --yes            Move without the review (without a terminal: required)
 
 Options of analyze and history:
   --json           Print the data as JSON
@@ -108,6 +123,10 @@ func dispatch(args []string) error {
 		return cmdClean(args[1:])
 	case "analyze":
 		return cmdAnalyze(args[1:])
+	case "apps":
+		return cmdApps(args[1:], "")
+	case "uninstall":
+		return cmdUninstall(args[1:])
 	case "history":
 		return cmdHistory(args[1:])
 	case "restore":
@@ -452,6 +471,200 @@ func printUsage(path string) error {
 	return enc.Encode(report)
 }
 
+func appsOptions(home string) apps.Options {
+	o := apps.DefaultOptions(home)
+	return o
+}
+
+func physicalHome() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if p, err := filepath.EvalSymlinks(home); err == nil {
+		home = p
+	}
+	return home, nil
+}
+
+func cmdApps(args []string, open string) error {
+	fs := flag.NewFlagSet("apps", flag.ContinueOnError)
+	unused := fs.Bool("unused", false, "")
+	leftovers := fs.Bool("leftovers", false, "")
+	asJSON := fs.Bool("json", false, "")
+	withData := fs.Bool("with-data", false, "")
+	if positional, err := parse(fs, args); err != nil {
+		return err
+	} else if len(positional) > 0 {
+		return usageError{"apps takes no argument; to remove one app: handbyte uninstall <app>"}
+	}
+	home, err := physicalHome()
+	if err != nil {
+		return err
+	}
+	opts := appsOptions(home)
+	if *asJSON || !interactive() {
+		return printApps(os.Stdout, opts, *unused, *leftovers)
+	}
+	fast := opts
+	fast.SkipSizes = true
+	return tui.RunApps(tui.AppsOptions{
+		Home:      home,
+		Open:      open,
+		WithData:  *withData,
+		Inventory: func(ctx context.Context) ([]apps.App, error) { return apps.Inventory(ctx, fast) },
+		Sizes:     apps.MeasureSizes,
+		Known:     apps.KnownBundleIDs,
+		Related: func(a apps.App, others []string, withData bool) []apps.Related {
+			files := apps.FindRelated(home, apps.Target{BundleID: a.BundleID, Name: a.Name, Zap: a.Zap}, others, withData)
+			apps.MeasureRelated(context.Background(), files)
+			return files
+		},
+		Leftovers: func(known, names []string) []apps.LeftoverGroup {
+			items := apps.FindLeftovers(home, known, names)
+			for i := range items {
+				r := []apps.Related{{Path: items[i].Path, IsDir: items[i].IsDir}}
+				apps.MeasureRelated(context.Background(), r)
+				items[i].Size = r[0].Size
+			}
+			return apps.GroupLeftovers(items)
+		},
+		Uninstall: func(ctx context.Context, plan cleaner.AppPlan) (string, []cleaner.Result, error) {
+			return cleaner.Uninstall(ctx, plan, cleaner.AppOptions{Roots: opts.Roots, Running: bundleRunning})
+		},
+	})
+}
+
+// bundleRunning reports whether a process of the app bundle runs now.
+func bundleRunning(bundle string) bool {
+	out, err := exec.Command("/bin/ps", "-axo", "comm=").Output()
+	if err != nil {
+		// A missing process list must never allow the move.
+		return true
+	}
+	return strings.Contains(string(out), bundle+"/Contents/")
+}
+
+func printApps(w io.Writer, opts apps.Options, unused, leftovers bool) error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	list, err := apps.Inventory(ctx, opts)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if leftovers {
+		var names []string
+		for _, a := range list {
+			names = append(names, a.Name)
+		}
+		groups := apps.GroupLeftovers(apps.FindLeftovers(opts.Home, apps.KnownBundleIDs(list), names))
+		if groups == nil {
+			groups = []apps.LeftoverGroup{}
+		}
+		return enc.Encode(map[string]any{"schema_version": 1, "leftovers": groups})
+	}
+	out := []apps.App{}
+	now := time.Now()
+	for _, a := range list {
+		if !unused || a.Unused(now) {
+			out = append(out, a)
+		}
+	}
+	return enc.Encode(map[string]any{"schema_version": 1, "apps": out})
+}
+
+func cmdUninstall(args []string) error {
+	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
+	withData := fs.Bool("with-data", false, "")
+	reset := fs.Bool("reset", false, "")
+	dryRun := fs.Bool("dry-run", false, "")
+	yes := fs.Bool("yes", false, "")
+	positional, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(positional) != 1 {
+		return usageError{"uninstall needs one app name or bundle ID; see: handbyte apps"}
+	}
+	name := positional[0]
+	if interactive() && !*yes && !*dryRun && !*reset {
+		flagArgs := []string{}
+		if *withData {
+			flagArgs = append(flagArgs, "--with-data")
+		}
+		return cmdApps(flagArgs, name)
+	}
+	home, err := physicalHome()
+	if err != nil {
+		return err
+	}
+	opts := appsOptions(home)
+	opts.SkipSizes = true
+	list, err := apps.Inventory(context.Background(), opts)
+	if err != nil {
+		return err
+	}
+	var app *apps.App
+	var others []string
+	for i := range list {
+		if strings.EqualFold(list[i].Name, name) || strings.EqualFold(list[i].BundleID, name) {
+			app = &list[i]
+		} else {
+			others = append(others, list[i].BundleID)
+		}
+	}
+	if app == nil {
+		return fmt.Errorf("no app named %q in %s", name, strings.Join(opts.Roots, " or "))
+	}
+	files := apps.FindRelated(home, apps.Target{BundleID: app.BundleID, Name: app.Name, Zap: app.Zap}, others, *withData)
+	apps.MeasureRelated(context.Background(), files)
+	plan := cleaner.AppPlan{Name: app.Name, BundleID: app.BundleID, System: app.System, Cask: app.CaskToken}
+	if !*reset {
+		id, err := scanner.EntryIdentity(app.Path)
+		if err != nil {
+			return err
+		}
+		plan.Bundle, plan.BundleIdentity = app.Path, id
+		fmt.Printf("app       %s\n", app.Path)
+	}
+	for _, f := range files {
+		mark := "keep"
+		if f.Selected {
+			mark = "move"
+			c, err := cleaner.NewAppFile(f.Path, f.Size)
+			if err != nil {
+				return fmt.Errorf("%s: %w", f.Path, err)
+			}
+			plan.Files = append(plan.Files, c)
+		}
+		fmt.Printf("%-9s %-8s %-6s %10s  %s\n", f.Class, f.Confidence, mark, tui.Bytes(f.Size), f.Path)
+	}
+	if !*yes && !*dryRun {
+		fmt.Println("Nothing was changed. Run with --yes to move the items marked move to the Trash.")
+		return nil
+	}
+	group, results, err := cleaner.Uninstall(context.Background(), plan, cleaner.AppOptions{Roots: opts.Roots, Running: bundleRunning, DryRun: *dryRun})
+	moved := 0
+	for _, r := range results {
+		if r.Status == "trashed" || r.Status == "previewed" {
+			moved++
+		} else {
+			fmt.Printf("skipped %s: %s\n", r.Path, r.Message)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if *dryRun {
+		fmt.Printf("Preview: %d items would move to the Trash.\n", moved)
+		return nil
+	}
+	fmt.Printf("Moved %d items to the Trash. Put them back: handbyte restore %s\n", moved, group)
+	return nil
+}
+
 func cmdHistory(args []string) error {
 	fs := flag.NewFlagSet("history", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "")
@@ -657,6 +870,8 @@ func runHome() error {
 		switch action {
 		case tui.ActionClean:
 			err = cmdClean(nil)
+		case tui.ActionApps:
+			err = cmdApps(nil, "")
 		case tui.ActionAnalyze:
 			err = cmdAnalyze(nil)
 		case tui.ActionHistory:

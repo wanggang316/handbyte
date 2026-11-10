@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/wanggang316/handbyte/internal/scanner"
@@ -97,8 +98,36 @@ func History() ([]Result, error) {
 	return results, lines.Err()
 }
 
-// Restore refuses replacement of an existing path and checks the Trash identity.
+// Restore puts back the action with this ID, or every action of the group
+// with this ID. It refuses replacement of an existing path and checks the
+// Trash identity.
 func Restore(ctx context.Context, id string) error {
+	history, err := History()
+	if err != nil {
+		return err
+	}
+	var group []string
+	for _, r := range history {
+		if r.Group == id && r.Group != "" && r.Status == "trashed" {
+			group = append(group, r.ID)
+		}
+	}
+	if len(group) == 0 {
+		return restoreOne(ctx, id)
+	}
+	var failed []string
+	for _, member := range group {
+		if err := restoreOne(ctx, member); err != nil {
+			failed = append(failed, err.Error())
+		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("%d of %d items were not restored: %s", len(failed), len(group), strings.Join(failed, "; "))
+	}
+	return nil
+}
+
+func restoreOne(ctx context.Context, id string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

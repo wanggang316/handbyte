@@ -44,6 +44,9 @@ type Result struct {
 	Err           error `json:"-"`
 	StartedAt     time.Time
 	EndedAt       time.Time
+	// Group joins the actions of one uninstall, so that one restore puts
+	// all of them back.
+	Group string `json:",omitempty"`
 }
 
 // CanRestore reports whether the recorded outcome supports an in-app restore.

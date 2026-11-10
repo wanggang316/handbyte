@@ -18,6 +18,7 @@ type Action int
 const (
 	ActionQuit Action = iota
 	ActionClean
+	ActionApps
 	ActionAnalyze
 	ActionHistory
 )
@@ -58,9 +59,9 @@ var homeEntries = []homeEntry{
 	{
 		name:    "Apps",
 		desc:    "See what each app uses, uninstall it with its leftovers",
-		hint:    []string{"Shows the size and the last use of each app, and removes an app with the files it left.", "Not in this version. It comes in a later release."},
-		primary: "not available yet",
-		planned: true,
+		hint:    []string{"Shows the size, the source and the last use of each app. Removes an app with the files it keeps.", "Everything goes to the Trash as one group, so one restore puts it back. Leftovers lists data of removed apps."},
+		action:  ActionApps,
+		primary: "open Apps",
 	},
 	{
 		name:    "Analyze",
@@ -137,7 +138,7 @@ func (m *Home) stat(e homeEntry) string {
 		}
 		return Meta.Render("last cleaned " + ago(m.info.Now.Sub(m.info.LastAction)))
 	case "Apps":
-		return Meta.Render("later version")
+		return Meta.Render("uninstall, leftovers")
 	case "Analyze":
 		if h := m.info.Home; h != nil {
 			return Meta.Render("home " + Bytes(h.Allocated) + " · " + since(m.info.Now.Sub(h.ScannedAt)) + " ago")
