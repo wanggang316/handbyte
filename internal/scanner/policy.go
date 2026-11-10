@@ -228,3 +228,20 @@ func assess(ctx context.Context, it *Item, exclusions []string, probe ActivityPr
 		it.Reason = "No owner process detected; file activity is older than 7 days"
 	}
 }
+
+// EntryIdentity binds a file or a directory to its filesystem object. It
+// refuses a symbolic link, so that an action never follows one.
+func EntryIdentity(path string) (Identity, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return Identity{}, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return Identity{}, errors.New("target is a symbolic link")
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return Identity{}, errors.New("file identity unavailable")
+	}
+	return Identity{Device: uint64(st.Dev), Inode: uint64(st.Ino)}, nil
+}

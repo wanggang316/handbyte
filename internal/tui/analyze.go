@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/wanggang316/handbyte/catalog"
+	"github.com/wanggang316/handbyte/internal/cleaner"
 	"github.com/wanggang316/handbyte/internal/scanner"
 	"github.com/wanggang316/handbyte/internal/usage"
 )
@@ -61,6 +62,7 @@ type Analyze struct {
 	hasLast bool
 	// categories of the finished scan, largest first.
 	categories []CategoryShare
+	collect    collector
 }
 
 // AnalyzeOptions connects the drill-down to the catalog and the cache.
@@ -71,6 +73,9 @@ type AnalyzeOptions struct {
 	Categories []catalog.CategoryPath
 	// SummaryFile keeps the last result of each folder. Empty: no cache.
 	SummaryFile string
+	// Collect moves picked items to the Trash. Tests replace it; nil uses
+	// cleaner.Collect with the Finder.
+	Collect func(context.Context, []cleaner.Collected) []cleaner.Result
 }
 
 // NewAnalyze returns the drill-down for a path.
@@ -149,6 +154,9 @@ func (m *Analyze) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.levels = []level{{node: msg.result.Root}}
 			m.finish(msg.result)
 		}
+	case collectDoneMsg:
+		m.collect.results = msg
+		m.collect.stage = collectDone
 	case tea.KeyMsg:
 		return m.key(msg.String())
 	}
@@ -194,6 +202,9 @@ func (m *Analyze) key(key string) (tea.Model, tea.Cmd) {
 		m.help = false
 		return m, nil
 	}
+	if m.collect.stage != collectOff {
+		return m.collectKey(key)
+	}
 	if key == "?" {
 		m.help = true
 		return m, nil
@@ -211,6 +222,20 @@ func (m *Analyze) key(key string) (tea.Model, tea.Cmd) {
 		m.move(m.listHeight(), len(rows))
 	case "tab":
 		m.files = !m.files
+	case " ":
+		if m.files {
+			if m.fileCursor < len(m.result.Largest) {
+				f := m.result.Largest[m.fileCursor]
+				m.toggleCollected(f.Path, f.Allocated)
+			}
+		} else if current.cursor < len(rows) && rows[current.cursor].node != nil && rows[current.cursor].node.Skipped == "" {
+			n := rows[current.cursor].node
+			m.toggleCollected(filepath.Join(m.currentPath(), n.Name), n.Allocated)
+		}
+	case "c":
+		if len(m.collect.items) > 0 {
+			m.collect.stage, m.collect.cursor = collectReview, 0
+		}
 	case "r":
 		return m, m.start()
 	case "esc", "left", "h", "backspace":
@@ -333,6 +358,8 @@ func (m *Analyze) View() string {
 	case m.result == nil:
 		f.Body = []string{strings.Repeat(" ", Margin(m.width)) + Danger.Render("The folder cannot be read: "+fmt.Sprint(m.err))}
 		f.Primary = Key{"enter", "close"}
+	case m.collect.stage != collectOff:
+		m.viewCollect(&f)
 	case m.files:
 		m.viewFiles(&f)
 	default:
@@ -492,7 +519,17 @@ func (m *Analyze) viewTree(f *Frame) {
 	if len(m.levels) == 1 {
 		back = Key{"esc", "close"}
 	}
-	f.Keys = []Key{{"↑↓", "move"}, back, {"tab", "largest files"}, {"o", "Finder"}, {"r", "scan again"}, {"q", "quit"}}
+	f.Keys = []Key{{"↑↓", "move"}, back, {"space", "pick for Trash"}, {"tab", "largest files"}, {"o", "Finder"}, {"r", "scan again"}, {"q", "quit"}}
+	m.collectKeys(f)
+}
+
+// collectKeys puts the review of the picked items first in the key bar.
+func (m *Analyze) collectKeys(f *Frame) {
+	if len(m.collect.items) == 0 {
+		return
+	}
+	f.Keys = append([]Key{f.Primary}, f.Keys...)
+	f.Primary = Key{"c", "review " + m.collect.label()}
 }
 
 // treeRow draws one line: marker, name, size, bar and percent. The size
@@ -531,8 +568,15 @@ func (m *Analyze) treeRow(r analyzeRow, parent, largest int64, width int, curren
 	if r.node == nil || r.node.Skipped != "" {
 		style = Meta
 	}
+	picked := r.node != nil && m.collectedMarker(m.currentPath(), r.node.Name)
+	if picked {
+		marker = Review.Render("◆ ")
+	}
 	if current {
 		style, marker = Strong, Safe.Render("▸ ")
+		if picked {
+			marker = Review.Render("◆ ")
+		}
 	}
 	line := marker + style.Render(name) + " " + style.Render(right)
 	if barWidth > 0 {
@@ -610,8 +654,14 @@ func (m *Analyze) viewFiles(f *Frame) {
 			rel = files[i].Path
 		}
 		style, marker := Normal, "  "
+		if m.collect.has(files[i].Path) {
+			marker = Review.Render("◆ ")
+		}
 		if i == m.fileCursor {
-			style, marker = Strong, Safe.Render("▸ ")
+			style = Strong
+			if !m.collect.has(files[i].Path) {
+				marker = Safe.Render("▸ ")
+			}
 		}
 		name := CutMiddle(rel, max(6, inner-2-13))
 		body = append(body, pad+Between(marker+style.Render(name), style.Render(Bytes(files[i].Allocated)), inner))
@@ -621,7 +671,8 @@ func (m *Analyze) viewFiles(f *Frame) {
 	}
 	f.Body = body
 	f.Primary = Key{"enter", "show in Finder"}
-	f.Keys = []Key{{"↑↓", "move"}, {"tab", "folders"}, {"r", "scan again"}, {"q", "quit"}}
+	f.Keys = []Key{{"↑↓", "move"}, {"space", "pick for Trash"}, {"tab", "folders"}, {"r", "scan again"}, {"q", "quit"}}
+	m.collectKeys(f)
 }
 
 // since says how long ago, in the largest whole unit.

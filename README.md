@@ -97,6 +97,12 @@ No items start selected. The default scan retains the existing `all` scope;
 saves them. Default project roots are `~/dev`, `~/Projects`, `~/Code`, and
 `~/workspace`.
 
+In `handbyte analyze`, space picks a file or a folder and `c` reviews the
+picked items. They go to the Trash only, and each move is recorded, so
+`handbyte restore` puts it back. A folder that a cleanup rule covers points
+to `handbyte clean` instead. Standard folders such as `~/Documents` and
+private data such as `~/Library/Keychains` cannot be picked.
+
 The options of earlier releases without a command (`handbyte --dry-run`,
 `--scan-only`, `--explore`, `--history`, `--restore`, `--protect`,
 `--unprotect`, `--save-roots`) still work in this release. Each one prints

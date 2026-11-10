@@ -113,7 +113,9 @@ func Restore(ctx context.Context, id string) error {
 		if r.Status != "trashed" || r.Destination == "" || r.TrashIdentity.Inode == 0 {
 			return errors.New("action has no verified Trash destination")
 		}
-		actual, err := scanner.CaptureIdentity(r.Destination)
+		// A collected item can be a file; EntryIdentity accepts files and
+		// folders and refuses a symbolic link.
+		actual, err := scanner.EntryIdentity(r.Destination)
 		if err != nil {
 			return err
 		}
