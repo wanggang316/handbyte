@@ -1,0 +1,10 @@
+{
+  "name": "a short or generic app name matches nothing by name, and data is selected with the data option",
+  "app": {"bundleID": "io.example.web", "name": "Web", "zap": []},
+  "others": [],
+  "withData": true,
+  "files": ["Library/Application Support/Web/x", "Library/Caches/Web/x", "Library/Application Support/io.example.web/x"],
+  "expect": [
+    {"path": "Library/Application Support/io.example.web", "class": "data", "confidence": "high", "selected": true}
+  ]
+}

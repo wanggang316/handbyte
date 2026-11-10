@@ -1,0 +1,8 @@
+{
+  "name": "an app of the system has no files to offer",
+  "app": {"bundleID": "com.apple.Safari", "name": "Safari", "zap": []},
+  "others": [],
+  "withData": true,
+  "files": ["Library/Caches/com.apple.Safari/x", "Library/Safari/History.db"],
+  "expect": []
+}

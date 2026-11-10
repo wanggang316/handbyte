@@ -72,3 +72,22 @@ func TestParseStorageRejectsDefects(t *testing.T) {
 		}
 	}
 }
+
+func TestEmbeddedAppCatalogIsValid(t *testing.T) {
+	a, err := ParseApps(appsJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.Locations) == 0 || len(a.ApplicationRoots) == 0 {
+		t.Fatal("app catalog is empty")
+	}
+	for name, data := range map[string]string{
+		"two placeholders": `{"version":1,"applicationRoots":[],"locations":[{"path":"~/{name}/{bundleID}","class":"data"}],"leftoverRoots":[],"genericNames":[],"protectedPrefixes":[],"leftoverIgnorePrefixes":[]}`,
+		"no placeholder":   `{"version":1,"applicationRoots":[],"locations":[{"path":"~/Library","class":"data"}],"leftoverRoots":[],"genericNames":[],"protectedPrefixes":[]}`,
+		"unknown class":    `{"version":1,"applicationRoots":[],"locations":[{"path":"~/{name}","class":"x"}],"leftoverRoots":[],"genericNames":[],"protectedPrefixes":[]}`,
+	} {
+		if _, err := ParseApps([]byte(data)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

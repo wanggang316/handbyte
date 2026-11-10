@@ -52,3 +52,24 @@ is the folder or one of its parents, and to `other` when no rule matches.
 When a path rule lies below a folder, the folder is split: each child is
 measured by the same rule, and the files directly in the folder go to the
 category of the folder.
+
+## apps
+
+A case builds a home directory and finds the files of one app, or the
+leftovers of apps that are gone. A path in `files` ends with a file; its
+folders are made.
+
+| Field | Meaning |
+| --- | --- |
+| `app` | The bundle ID, the name and the cask `zap` paths of the app |
+| `others` | Bundle IDs of the other installed apps |
+| `withData` | The option that also selects the app's data |
+| `installed`, `installedNames` | For leftovers: every known bundle ID, and the names of the installed apps |
+| `expect` | The complete result in path order: path relative to the home directory, class, confidence and the default selection; for leftovers the bundle ID and the class |
+
+The rules are in `catalog/apps.json`: a bundle ID matches only at a dot
+boundary; an app name needs three characters and must not be a generic
+word; a name that belongs more exactly to another installed app is not
+taken; `com.apple.*` is never offered. A leftover is a folder (or, in Preferences, a `.plist` file) named by a bundle ID whose vendor (the first two parts, `com.example`) has no installed app, none of whose parts is the vendor name (`example`) or the name of an installed app, that holds no UUID and that is not a shared library or updater of the ignore list. Caches, logs and state are selected,
+settings are selected for a bundle ID match, data only with `withData`, and
+a low match never.
