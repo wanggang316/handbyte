@@ -567,8 +567,23 @@ Step 2, Storage, 2026-11-10 (first part):
   first level and the largest files.
 - App: the Storage section with running totals, a treemap with a side list,
   the largest files, and "Review in Clean" for a folder that a rule covers.
-- Not done: `getattrlistbulk` and clone counting, categories, the result
-  cache, the collector, the volume overview with purgeable space.
+- Categories from `catalog/storage.json` (Apps, Developer, Documents,
+  Media, Caches and logs, Other) with a shared conformance case. The CLI
+  home screen and the app Overview split the used space by them.
+- The last result of each folder is kept. The next scan shows the last
+  sizes until each folder is measured again.
+- The collector, in both products: pick files and folders, review them,
+  move them to the Trash. Only items in the home folder; standard folders,
+  private data, excluded paths and symbolic links are refused; a folder that
+  a cleanup rule covers points to Clean. Each move is journaled; the CLI can
+  restore it.
+- The app Overview names the purgeable part of the free space.
+- Deferred: `getattrlistbulk` and counting APFS clones once. The Go standard
+  library and `x/sys/unix` have no wrapper for the call, and the clone
+  attributes are not verified on the supported macOS versions (see "Facts
+  that shape the design"). Until then a clone counts in full, as `du` does.
+  Next: a probe on macOS 14 and 27 that checks `ATTR_CMNEXT_CLONEID` and
+  `ATTR_CMNEXT_PRIVATESIZE` from the bulk call, then the Swift engine first.
 
 Not done in step 1: the terminal screens were checked by tests at 58x20,
 80x24, 110x28 and 160x45 without color, and by one run in a pseudo terminal;
