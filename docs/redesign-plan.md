@@ -638,15 +638,33 @@ Step 5, Finish, 2026-11-10:
   mouse support (wheel, click, a second click opens) in the drill-down and
   the apps list, `handbyte config mouse off`.
 - Accessibility: every button of the app has a label (checked with the
-  accessibility API). Not done: a full VoiceOver pass and a Reduce Motion
-  pass.
+  accessibility API). Every animation, transition and number change goes
+  through `hbAnimation`, `hbTransition` and `hbNumericTransition`
+  (Design/Motion.swift): with Reduce Motion, no motion, only a fade.
+  Custom views have labels and values: the category meter is one element,
+  the progress line has a percent, decorative icons are hidden. The
+  Storage treemap is one summary for VoiceOver; the side list is the path,
+  with Open as an action. Lists drawn with stacks (Storage, Apps,
+  leftovers) take the keyboard focus: arrows, Return, left to go back.
+  Sheets have Esc for Cancel and Return for the action, except a
+  permanent deletion.
+- Terminal: text colors keep 4.5:1 on white, Solarized light, black and
+  grey backgrounds, checked by `theme_test.go`; tests render Home, Analyze
+  and Apps with a light and a dark background and with the Ascii profile
+  of `NO_COLOR`.
+- Checked on 2026-11-10: screenshots of Overview, Clean, Storage, Apps and
+  History in the dark and the light appearance; list rows pressed through
+  the accessibility API. Not done: a full pass with VoiceOver speaking, a
+  run with the Reduce Motion setting on (checked by code only), the
+  keyboard path checked by hand (no synthetic key events were used), and
+  a light terminal checked by eye in a real terminal.
 
 Not done in step 1: the terminal screens were checked by tests at 58x20,
-80x24, 110x28 and 160x45 without color, and by one run in a pseudo terminal;
-a light terminal theme was not checked. The app was checked by screenshots of
-the Overview, a planned section and the Clean start screen in the light
-appearance; the dark appearance, Reduce Motion and keyboard-only use were
-not checked.
+80x24, 110x28 and 160x45 without color, and by one run in a pseudo terminal.
+The app was checked by screenshots of the Overview, a planned section and
+the Clean start screen in the light appearance. Step 5 added the light
+terminal, the dark appearance, Reduce Motion and the keyboard paths; see
+there for what is still open.
 
 Acceptance for each step: the conformance fixtures pass in both products;
 terminal screens are checked at 58x20, 80x24, 110x28 and 160x45 in a dark and
