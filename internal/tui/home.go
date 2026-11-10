@@ -7,6 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/wanggang316/handbyte/catalog"
+	"github.com/wanggang316/handbyte/internal/usage"
 )
 
 // Action is what the user chose on the home screen.
@@ -30,6 +33,8 @@ type HomeInfo struct {
 	Actions    int
 	LastAction time.Time
 	Now        time.Time
+	// Home is the last Analyze result of the home folder, if any.
+	Home *usage.Summary
 }
 
 type homeEntry struct {
@@ -134,6 +139,9 @@ func (m *Home) stat(e homeEntry) string {
 	case "Apps":
 		return Meta.Render("later version")
 	case "Analyze":
+		if h := m.info.Home; h != nil {
+			return Meta.Render("home " + Bytes(h.Allocated) + " · " + since(m.info.Now.Sub(h.ScannedAt)) + " ago")
+		}
 		if m.info.Total > 0 {
 			return Meta.Render(Bytes(m.info.Total-m.info.Free) + " used")
 		}
@@ -182,9 +190,13 @@ func (m *Home) View() string {
 	if m.info.Total > 0 {
 		body = append(body, pad+Strong.Render(Bytes(m.info.Free)+" free")+Meta.Render(" of "+Bytes(m.info.Total)))
 		if roomy {
-			used := int(float64(inner) * float64(m.info.Total-m.info.Free) / float64(m.info.Total))
-			used = max(0, min(inner, used))
-			body = append(body, pad+Normal.Render(strings.Repeat("█", used))+Faint.Render(strings.Repeat("░", inner-used)), "")
+			parts := m.volumeParts()
+			body = append(body, pad+CategoryBar(parts, m.info.Total, inner))
+			if m.info.Home != nil {
+				body = append(body, pad+CategoryLegend(parts, inner))
+			} else {
+				body = append(body, pad+Meta.Render("Open Analyze once to see what fills the disk."))
+			}
 		}
 		body = append(body, "")
 	}
@@ -223,6 +235,33 @@ func (m *Home) View() string {
 	f.Primary = Key{"enter", e.primary}
 	f.Keys = []Key{{"↑↓", "move"}, {"1-4", "jump"}, {"?", "help"}, {"q", "quit"}}
 	return f.Render()
+}
+
+// volumeParts splits the used space: the categories of the home folder from
+// the last Analyze, and the rest of the disk. Without a result, all used
+// space is one part.
+func (m *Home) volumeParts() []CategoryShare {
+	used := max(0, m.info.Total-m.info.Free)
+	h := m.info.Home
+	if h == nil {
+		return []CategoryShare{{"other", "Used", used}}
+	}
+	titles := catalog.LoadStorage()
+	var parts []CategoryShare
+	var home int64
+	for _, c := range h.Categories {
+		if c.ID == catalog.OtherCategory {
+			continue
+		}
+		parts = append(parts, CategoryShare{c.ID, titles.Title(c.ID), c.Allocated})
+		home += c.Allocated
+	}
+	// Other in the home folder and all outside it share one grey part, so
+	// that the bar has few colors.
+	if rest := used - home; rest > 0 {
+		parts = append(parts, CategoryShare{"other", "System and other", rest})
+	}
+	return parts
 }
 
 // hintBox explains the highlighted entry in a rounded box.

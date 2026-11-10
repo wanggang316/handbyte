@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/wanggang316/handbyte/catalog"
 	"github.com/wanggang316/handbyte/internal/cleaner"
 	"github.com/wanggang316/handbyte/internal/scanner"
 	"github.com/wanggang316/handbyte/internal/settings"
@@ -250,12 +251,29 @@ func cmdAnalyze(args []string) error {
 	if *asJSON {
 		return printUsage(path)
 	}
-	saved, err := settings.Load()
-	if err != nil {
-		return err
-	}
+	return tui.RunAnalyze(path, analyzeOptions())
+}
+
+// analyzeOptions connects the drill-down to the catalog, the settings and
+// the result cache.
+func analyzeOptions() tui.AnalyzeOptions {
+	saved, _ := settings.Load()
 	home, _ := os.UserHomeDir()
-	return tui.RunAnalyze(path, scanner.NewHints(home, saved.Roots))
+	if physical, err := filepath.EvalSymlinks(home); err == nil {
+		home = physical
+	}
+	roots := saved.Roots
+	if len(roots) == 0 {
+		roots = scanner.DefaultProjectRoots
+	}
+	opts := tui.AnalyzeOptions{
+		Hints:      scanner.NewHints(home, saved.Roots),
+		Categories: catalog.LoadStorage().Paths(home, roots),
+	}
+	if dir, err := settings.Dir(); err == nil {
+		opts.SummaryFile = filepath.Join(dir, "usage.json")
+	}
+	return opts
 }
 
 // printUsage scans a folder with the storage engine and prints the first
@@ -506,6 +524,16 @@ func runHome() error {
 			for _, r := range results {
 				if r.EndedAt.After(info.LastAction) && r.Status != "previewed" {
 					info.LastAction = r.EndedAt
+				}
+			}
+		}
+		if dir, err := settings.Dir(); err == nil {
+			if home, err := os.UserHomeDir(); err == nil {
+				if physical, err := filepath.EvalSymlinks(home); err == nil {
+					home = physical
+				}
+				if s, ok := usage.LoadSummary(filepath.Join(dir, "usage.json"), home); ok {
+					info.Home = &s
 				}
 			}
 		}

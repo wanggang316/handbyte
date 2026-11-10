@@ -16,6 +16,8 @@ type Hints struct {
 
 // NewHints builds the lookup for a home directory and the project roots.
 // When two presets reach one path, the one with the deeper template wins.
+// A rule of the caution tier gives no hint: it holds user data, and the
+// view must not call it cleanable.
 func NewHints(home string, roots []string) Hints {
 	h := Hints{exact: map[string]Preset{}, parents: map[string]Preset{}, artifacts: map[string]Preset{}}
 	expand := func(p string) string {
@@ -34,6 +36,9 @@ func NewHints(home string, roots []string) Hints {
 		table[path] = p
 	}
 	for _, p := range Presets {
+		if p.Safety == SafetyCaution {
+			continue
+		}
 		if p.ExpandChildren {
 			keep(h.parents, expand(p.Path), p)
 		} else {
@@ -41,6 +46,9 @@ func NewHints(home string, roots []string) Hints {
 		}
 	}
 	for _, a := range ProjectArtifactPatterns {
+		if a.Safety == SafetyCaution {
+			continue
+		}
 		h.artifacts[a.Name] = Preset{Category: a.Category, Safety: a.Safety, Description: a.Description, Source: "artifact:" + a.Name}
 	}
 	if len(roots) == 0 {

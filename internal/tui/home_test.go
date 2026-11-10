@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/wanggang316/handbyte/internal/usage"
 )
 
 func testHome(width, height int) *Home {
@@ -92,4 +94,21 @@ func TestHomeKeys(t *testing.T) {
 	if out := m.View(); !strings.Contains(out, "handbyte restore <id>") {
 		t.Errorf("help is missing:\n%s", out)
 	}
+}
+
+func TestHomeShowsTheCategoriesOfTheLastAnalyze(t *testing.T) {
+	m := testHome(110, 28)
+	if out := m.View(); !strings.Contains(out, "Open Analyze once") {
+		t.Fatalf("without a result the home screen must say how to get one:\n%s", out)
+	}
+	m.info.Home = &usage.Summary{Allocated: 150 << 30, ScannedAt: m.info.Now.Add(-2 * time.Hour), Categories: []usage.CategoryTotal{
+		{ID: "developer", Allocated: 96 << 30}, {ID: "media", Allocated: 40 << 30}, {ID: "other", Allocated: 14 << 30},
+	}}
+	out := m.View()
+	for _, want := range []string{"Developer 96.00 GiB", "Media 40.00 GiB", "System and other 176.00 GiB", "home 150.00 GiB · 2 h ago"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q is missing:\n%s", want, out)
+		}
+	}
+	assertFits(t, out, 110, 28)
 }

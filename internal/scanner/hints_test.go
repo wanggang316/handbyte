@@ -19,6 +19,8 @@ func TestCoveringRule(t *testing.T) {
 		"Music/node_modules":                          "",
 		"dev":                                         "",
 		"Documents":                                   "",
+		"Downloads":                                   "",
+		"Library/Developer/Xcode/Archives":            "",
 	}
 	for rel, want := range cases {
 		got := ""

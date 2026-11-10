@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/wanggang316/handbyte/catalog"
 	"github.com/wanggang316/handbyte/internal/scanner"
 	"github.com/wanggang316/handbyte/internal/usage"
 )
@@ -54,13 +55,27 @@ type Analyze struct {
 
 	// reveal shows a path in Finder. Tests replace it.
 	reveal func(path string) error
-	// hints marks the folders that a cleanup rule covers.
-	hints scanner.Hints
+	opts   AnalyzeOptions
+	// last is the summary of the previous scan of this folder.
+	last    usage.Summary
+	hasLast bool
+	// categories of the finished scan, largest first.
+	categories []CategoryShare
+}
+
+// AnalyzeOptions connects the drill-down to the catalog and the cache.
+type AnalyzeOptions struct {
+	// Hints marks the folders that a cleanup rule covers.
+	Hints scanner.Hints
+	// Categories are the path rules of the storage categories.
+	Categories []catalog.CategoryPath
+	// SummaryFile keeps the last result of each folder. Empty: no cache.
+	SummaryFile string
 }
 
 // NewAnalyze returns the drill-down for a path.
-func NewAnalyze(path string, hints scanner.Hints) *Analyze {
-	return &Analyze{path: path, hints: hints, reveal: func(p string) error { return exec.Command("open", "-R", p).Run() }}
+func NewAnalyze(path string, opts AnalyzeOptions) *Analyze {
+	return &Analyze{path: path, opts: opts, reveal: func(p string) error { return exec.Command("open", "-R", p).Run() }}
 }
 
 // rule returns the cleanup rule that covers a row of the opened folder.
@@ -68,7 +83,7 @@ func (m *Analyze) rule(r analyzeRow) (scanner.Preset, bool) {
 	if r.node == nil || !r.node.Dir {
 		return scanner.Preset{}, false
 	}
-	return m.hints.Rule(filepath.Join(m.currentPath(), r.node.Name))
+	return m.opts.Hints.Rule(filepath.Join(m.currentPath(), r.node.Name))
 }
 
 func (m *Analyze) Init() tea.Cmd { return m.start() }
@@ -77,8 +92,15 @@ func (m *Analyze) start() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	updates := make(chan usage.Progress, 1)
 	m.scanning, m.started, m.cancel, m.updates = true, time.Now(), cancel, updates
-	m.result, m.err, m.levels, m.files, m.fileCursor, m.progress = nil, nil, nil, false, 0, usage.Progress{}
+	m.result, m.err, m.levels, m.files, m.fileCursor, m.progress, m.categories = nil, nil, nil, false, 0, usage.Progress{}, nil
 	path := m.path
+	if m.opts.SummaryFile != "" {
+		if physical, err := filepath.EvalSymlinks(path); err == nil {
+			if abs, err := filepath.Abs(physical); err == nil {
+				m.last, m.hasLast = usage.LoadSummary(m.opts.SummaryFile, abs)
+			}
+		}
+	}
 	scan := func() tea.Msg {
 		result, err := usage.Scan(ctx, path, usage.Options{Progress: func(p usage.Progress) {
 			// Keep the newest snapshot only; the screen needs no history.
@@ -125,11 +147,27 @@ func (m *Analyze) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.result != nil {
 			m.elapsed = msg.result.Elapsed
 			m.levels = []level{{node: msg.result.Root}}
+			m.finish(msg.result)
 		}
 	case tea.KeyMsg:
 		return m.key(msg.String())
 	}
 	return m, nil
+}
+
+// finish sums the categories and keeps the summary of a complete scan.
+func (m *Analyze) finish(r *usage.Result) {
+	totals := usage.Categorize(r, m.opts.Categories)
+	titles := catalog.LoadStorage()
+	for _, t := range totals {
+		m.categories = append(m.categories, CategoryShare{t.ID, titles.Title(t.ID), t.Allocated})
+	}
+	if m.opts.SummaryFile == "" || r.Cancelled {
+		return
+	}
+	if err := usage.SaveSummary(m.opts.SummaryFile, usage.Summarize(r, totals, time.Now())); err != nil {
+		m.notice = Review.Render("The result could not be kept for the next run: " + err.Error())
+	}
 }
 
 func (m *Analyze) key(key string) (tea.Model, tea.Cmd) {
@@ -325,8 +363,16 @@ func (m *Analyze) viewScanning(f *Frame) {
 		rate = float64(p.Files) / seconds
 	}
 	f.Summary = tilde(m.path)
+	lastSize := map[string]int64{}
+	found := Strong.Render(Bytes(p.Allocated)) + Meta.Render(" found so far")
+	if m.hasLast {
+		found += Meta.Render(fmt.Sprintf("   last time %s, %s ago", Bytes(m.last.Allocated), since(time.Since(m.last.ScannedAt))))
+		for _, e := range m.last.Top {
+			lastSize[e.Name] = e.Allocated
+		}
+	}
 	body := []string{
-		pad + Strong.Render(Bytes(p.Allocated)) + Meta.Render(" found so far"),
+		pad + found,
 		pad + Meta.Render(fmt.Sprintf("%s files · %s files per second · %.1f s", count(p.Files), count(int64(rate)), seconds)),
 		"",
 	}
@@ -348,7 +394,13 @@ func (m *Analyze) viewScanning(f *Frame) {
 		case t.Allocated > 0:
 			body = append(body, pad+Between(Safe.Render(spinner[m.frame%len(spinner)]+" ")+Title.Render(name), Title.Render(Bytes(t.Allocated)+"+"), inner))
 		default:
-			body = append(body, pad+Meta.Render("· "+name))
+			// Until the folder is measured, its size of the last run stands
+			// in, in a faint tone, so that the list is not empty.
+			was := ""
+			if size, ok := lastSize[t.Name]; ok {
+				was = Faint.Render(Bytes(size))
+			}
+			body = append(body, pad+Between(Meta.Render("· "+name), was, inner))
 		}
 	}
 	f.Body = body
@@ -389,9 +441,13 @@ func (m *Analyze) viewTree(f *Frame) {
 		listWidth = inner * 6 / 10
 	}
 	head := Title.Render(CutMiddle(tilde(m.currentPath()), max(8, listWidth-14))) + Meta.Render("  "+Bytes(current.node.Allocated))
-	body := []string{pad + head, ""}
+	body := []string{pad + head}
+	if len(m.levels) == 1 && len(m.categories) > 0 && m.height >= compactHeight {
+		body = append(body, pad+CategoryBar(m.categories, m.result.Root.Allocated, inner), pad+CategoryLegend(m.categories, inner))
+	}
+	body = append(body, "")
 
-	height := max(1, m.listHeight()-2)
+	height := max(1, m.listHeight()-len(body))
 	offset := max(0, min(current.cursor-height/2, len(rows)-height))
 	var largest int64
 	for _, r := range rows {
@@ -490,8 +546,12 @@ func (m *Analyze) treeRow(r analyzeRow, parent, largest int64, width int, curren
 	if r.node != nil && r.node.Incomplete && r.node.Skipped == "" {
 		line += Review.Render(" !")
 	}
+	// The mark has its own column, so that a marked row is as wide as the
+	// others and the detail pane stays aligned.
 	if _, ok := m.rule(r); ok {
 		line += Safe.Render(" ●")
+	} else {
+		line += "  "
 	}
 	return line
 }
@@ -564,8 +624,21 @@ func (m *Analyze) viewFiles(f *Frame) {
 	f.Keys = []Key{{"↑↓", "move"}, {"tab", "folders"}, {"r", "scan again"}, {"q", "quit"}}
 }
 
+// since says how long ago, in the largest whole unit.
+func since(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "less than a minute"
+	case d < time.Hour:
+		return fmt.Sprintf("%d min", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%d h", int(d.Hours()))
+	}
+	return fmt.Sprintf("%d days", int(d.Hours()/24))
+}
+
 // RunAnalyze shows the drill-down for a path until the user leaves it.
-func RunAnalyze(path string, hints scanner.Hints) error {
-	_, err := tea.NewProgram(NewAnalyze(path, hints), tea.WithAltScreen()).Run()
+func RunAnalyze(path string, opts AnalyzeOptions) error {
+	_, err := tea.NewProgram(NewAnalyze(path, opts), tea.WithAltScreen()).Run()
 	return err
 }

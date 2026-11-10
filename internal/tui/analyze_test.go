@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/wanggang316/handbyte/catalog"
 	"github.com/wanggang316/handbyte/internal/scanner"
 	"github.com/wanggang316/handbyte/internal/usage"
 )
@@ -42,7 +43,7 @@ func scannedAnalyze(t *testing.T, width, height int) (*Analyze, *[]string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := NewAnalyze(root, scanner.NewHints(root, nil))
+	m := NewAnalyze(root, AnalyzeOptions{Hints: scanner.NewHints(root, nil)})
 	var shown []string
 	m.reveal = func(path string) error { shown = append(shown, path); return nil }
 	m.scanning = true
@@ -155,7 +156,7 @@ func TestAnalyzeNavigation(t *testing.T) {
 }
 
 func TestAnalyzeScanningScreenShowsRunningTotals(t *testing.T) {
-	m := NewAnalyze("/tmp/example", scanner.Hints{})
+	m := NewAnalyze("/tmp/example", AnalyzeOptions{})
 	m.scanning = true
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.Update(analyzeProgressMsg(usage.Progress{Files: 12345, Allocated: 3 << 30, Current: "/tmp/example/b/deep", Top: []usage.TopProgress{
@@ -209,7 +210,7 @@ func TestAnalyzeMarksFoldersThatACleanupRuleCovers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := NewAnalyze(root, scanner.NewHints(result.Path, nil))
+	m := NewAnalyze(root, AnalyzeOptions{Hints: scanner.NewHints(result.Path, nil)})
 	m.scanning = true
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.Update(analyzeDoneMsg{result: result})
@@ -229,5 +230,40 @@ func TestAnalyzeMarksFoldersThatACleanupRuleCovers(t *testing.T) {
 	analyzeKey(m, "left")
 	if strings.Contains(m.View(), "Cleanable") {
 		t.Fatalf("the home folder itself is not covered:\n%s", m.View())
+	}
+}
+
+func TestAnalyzeKeepsTheResultAndShowsItDuringTheNextScan(t *testing.T) {
+	root := analyzeFixture(t)
+	file := filepath.Join(t.TempDir(), "usage.json")
+	result, err := usage.Scan(context.Background(), root, usage.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := AnalyzeOptions{SummaryFile: file, Categories: catalog.LoadStorage().Paths(result.Path, nil)}
+	m := NewAnalyze(root, opts)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
+	m.Update(analyzeDoneMsg{result: result})
+	if out := m.View(); !strings.Contains(out, "Other") {
+		t.Fatalf("the root must show the categories:\n%s", out)
+	}
+
+	next := NewAnalyze(root, opts)
+	next.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
+	next.start()
+	next.cancel()
+	next.Update(analyzeProgressMsg(usage.Progress{Top: []usage.TopProgress{{Name: "media", Dir: true}}}))
+	out := next.View()
+	if !strings.Contains(out, "last time "+Bytes(result.Root.Allocated)) || !strings.Contains(out, Bytes(result.Root.Children[0].Allocated)) {
+		t.Fatalf("the last result must show while the scan runs:\n%s", out)
+	}
+
+	cancelled := *result
+	cancelled.Cancelled = true
+	cancelled.Root = &usage.Node{Name: root, Dir: true, Allocated: 1}
+	third := NewAnalyze(root, opts)
+	third.Update(analyzeDoneMsg{result: &cancelled})
+	if s, ok := usage.LoadSummary(file, result.Path); !ok || s.Allocated != result.Root.Allocated {
+		t.Fatalf("a cancelled scan must not replace the summary: %+v", s)
 	}
 }

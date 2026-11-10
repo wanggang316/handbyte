@@ -4,6 +4,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -23,6 +24,31 @@ var (
 	ColorKey    = lipgloss.AdaptiveColor{Light: "#E4E5E8", Dark: "#2C2E34"}
 	ColorOnChip = lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#0F1012"}
 )
+
+// categoryColors are the hues of the storage categories, the same as in
+// the app. Caches and other stay grey, so that the eye goes to the large
+// categories first.
+var categoryColors = map[string]lipgloss.AdaptiveColor{
+	"apps":      {Light: "#6A57E8", Dark: "#8F7DFF"},
+	"developer": {Light: "#2F7FE0", Dark: "#4AA3FF"},
+	"documents": {Light: "#129C8B", Dark: "#35C6B4"},
+	"media":     {Light: "#D07A1C", Dark: "#F0A04B"},
+	"caches":    {Light: "#8B8F98", Dark: "#6B6F79"},
+	"other":     {Light: "#B5B8BF", Dark: "#454850"},
+}
+
+// categoryGlyphs carry the categories without color.
+var categoryGlyphs = map[string]string{
+	"apps": "▓", "developer": "█", "documents": "▒", "media": "▚", "caches": "░", "other": "·",
+}
+
+// CategoryStyle returns the style of a storage category.
+func CategoryStyle(id string) lipgloss.Style {
+	if c, ok := categoryColors[id]; ok {
+		return lipgloss.NewStyle().Foreground(c)
+	}
+	return Meta
+}
 
 // A terminal has one font size. Hierarchy comes from five levels of weight
 // and tone: Strong, Title, Normal, Meta and Label.
@@ -85,4 +111,56 @@ func Bytes(n int64) string {
 		return fmt.Sprintf("%.1f KiB", float64(n)/k)
 	}
 	return fmt.Sprintf("%d B", n)
+}
+
+// CategoryShare is one part of a category bar.
+type CategoryShare struct {
+	ID, Title string
+	Bytes     int64
+}
+
+// CategoryBar draws the parts as one bar of the given width, then the
+// remaining space as a faint track. total is the width of the whole bar in
+// bytes. With color the bar is solid blocks; without color each category
+// has its own glyph.
+func CategoryBar(parts []CategoryShare, total int64, width int) string {
+	if total <= 0 || width <= 0 {
+		return ""
+	}
+	var b strings.Builder
+	used := 0
+	for _, p := range parts {
+		cells := int(float64(p.Bytes)/float64(total)*float64(width) + 0.5)
+		cells = min(cells, width-used)
+		if cells <= 0 {
+			continue
+		}
+		glyph := "█"
+		if !hasColor() {
+			glyph = categoryGlyphs[p.ID]
+			if glyph == "" {
+				glyph = "#"
+			}
+		}
+		b.WriteString(CategoryStyle(p.ID).Render(strings.Repeat(glyph, cells)))
+		used += cells
+	}
+	b.WriteString(Faint.Render(strings.Repeat("░", width-used)))
+	return b.String()
+}
+
+// CategoryLegend names the parts with their sizes, as many as fit in width.
+func CategoryLegend(parts []CategoryShare, width int) string {
+	line := ""
+	for _, p := range parts {
+		next := CategoryStyle(p.ID).Render("■") + " " + Normal.Render(p.Title) + " " + Meta.Render(Bytes(p.Bytes))
+		if line != "" {
+			next = "   " + next
+		}
+		if Width(line)+Width(next) > width {
+			break
+		}
+		line += next
+	}
+	return line
 }
