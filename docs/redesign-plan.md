@@ -1,19 +1,23 @@
 # Redesign plan: clean, apps and storage for the CLI and the macOS app
 
-Status: proposal, 2026-11-10. Not approved. The section "Open decisions" lists
-what must be decided before implementation starts.
+Status: proposal, 2026-11-10, revision 2. Not approved. The section "Open
+decisions" lists what must be decided before implementation starts.
+Revision 2 adds one-step cleaning, the waiting states, a lighter visual
+direction and the logo.
 Research date: 2026-11-10. Baseline: handbyte `ac17ede`, handbyte-macos
 `cae90e7`, Mole `28e68bd`, Pearcleaner `7724df7`.
 Visual design: <https://claude.ai/artifact/UakSsGMe8KGWjUKtWb9yop> (private
-canvas: four app screens, four terminal screens, one token and state sheet).
+canvas: five app screens, five terminal screens, one token and state sheet,
+one logo sheet. The Smart Clean screens play the scan as an animation).
 
 ## Recommendation
 
 Grow handbyte from one cleanup list into three tools that share one safety
 boundary and one design language:
 
-1. **Clean**: more categories, each with an explicit rule, never a wildcard
-   sweep. Trash and restore stay the default.
+1. **Clean**: one step for the safe items (Smart Clean), with "Choose items"
+   and "Deep scan" for control. More categories and finer rules, each with an
+   explicit rule, never a wildcard sweep.
 2. **Apps**: size, last use and source for each app, and an uninstall that
    lists every related file with a confidence tier.
 3. **Storage**: a volume overview and a drill-down view on a new scan engine
@@ -83,11 +87,12 @@ The CLI and the app have the same five sections in the same order.
 
 Rules for every section:
 
-- One primary action for each screen. It is the only accent-colored control.
+- One primary action for each screen. It is the only filled ink control.
 - Three tiers with fixed names, glyphs and colors: **Safe** (●), **Review**
   (◐ in the app, ▲ in the terminal), **Protected** (▪ / ■). A tier is never
   shown by color alone.
-- No item starts selected. "Select all safe" is one explicit action.
+- Safe items are selected by default. Review items are never selected by
+  default. Protected items cannot be selected.
 - Each row gives the name first, in plain words. The path, the rule ID and the
   evidence are in the detail pane.
 - Storage and Apps never delete by themselves. They hand items to the same
@@ -97,8 +102,47 @@ Rules for every section:
 
 ### Clean
 
-Keep the present eligibility policy and the recheck before each action. Add
-categories in this order. Each one is a named rule in the catalog.
+Keep the present eligibility policy and the recheck before each action.
+
+#### Three depths
+
+| Mode | Entry | Scope | Steps |
+| --- | --- | --- | --- |
+| **Smart Clean** | "Clean now" on Overview, `handbyte clean` | Safe items of the fast areas | Scan, one confirmation with the total, clean, result. `--yes` and a setting remove the confirmation. |
+| **Choose items** | Link below the main button, `r` in the terminal, `handbyte clean --review` | All found items. Safe items start selected. | The grouped review list with the detail pane |
+| **Deep scan** | Link below the main button, `d` in the terminal, `handbyte clean --deep` | Adds the slow and costly areas: project build output on all roots, installers, old downloads, iOS backups, Xcode archives, Docker, leftovers of removed apps | Always ends in "Choose items", because these are Review items |
+
+Smart Clean never takes a Review item. After it finishes, the result names
+what stays ("5.2 GB more needs review") and links to "Choose items".
+
+Smart Clean removes Safe items directly, so that the freed number is real.
+A Safe item is one that its owner makes again, so a restore has no value.
+Review items, apps and collected files always go to the Trash. A setting
+("Always use the Trash") changes Smart Clean to the Trash. This changes the
+present default and is open decision 1.
+
+#### Finer rules
+
+Mole finds more because it has about 15 sections and several hundred
+app-specific rules. The catalog grows in the same direction, but each rule
+names exact subpaths, an owner bundle ID and a tier:
+
+- Browsers: Safari, Chrome, Edge, Arc, Brave, Firefox, Vivaldi and others,
+  for each profile, cache directories only.
+- Developer tools: add Bun, pnpm, pip, uv, Poetry, CocoaPods, Flutter, Bazel,
+  Composer, Terraform, VS Code and JetBrains logs and caches.
+- Apps: named cache rules for chat, meeting, music, design and cloud-drive
+  apps, most used first. Each rule lists what it must not touch.
+- A new rule needs a positive fixture, a protected fixture and a "running
+  owner" fixture before it can be Safe.
+
+The first screen groups the result into six areas (Xcode, package managers,
+app caches, browsers, logs, project build output). Each area opens to its
+items.
+
+#### Categories
+
+Add categories in this order. Each one is a named rule in the catalog.
 
 | Category | Target | Default tier | Guard |
 | --- | --- | --- | --- |
@@ -115,9 +159,39 @@ categories in this order. Each one is a named rule in the catalog.
 | Trash | `~/.Trash` | Review | Permanent. Needs its own confirmation. |
 | Local snapshots | `tmutil listlocalsnapshots` | Protected | Shown as information only |
 
-Flow: scan, then a summary with one tile for each category (size, tier split,
-Review and Clean entry points), then the grouped review list, then
-confirmation, then a result page with Restore, "Review remaining" and the log.
+#### Waiting states
+
+A scan must never show an empty screen. The rules are the same in the app and
+in the terminal.
+
+1. **Show the last result at once.** Overview opens with the cached number
+   and the line "Found 2 minutes ago · updates in the background". A new scan
+   replaces the number when it is ready.
+2. **Fast areas first.** Known paths are measured in parallel and report in
+   the first second. Project discovery runs last. Deep areas run only on
+   request.
+3. **One line for each area, three states.** Waiting (dim dot), scanning
+   (spinner, the current path, a size with a trailing `+`), complete (check
+   mark, size, a short summary such as "12 apps").
+4. **One large number that grows.** "12.4 GB found so far", then "18.4 GB
+   safe to clean", then "18.4 GB freed". The same position is used in all
+   phases, so the screen does not jump.
+5. **Evidence of speed.** A thin progress line by areas, and one meta line
+   with files checked, files per second and elapsed time.
+6. **Stop keeps the result.** "Stop and use what was found" goes to the
+   confirmation with the areas that are complete. The scan continues when the
+   user changes tabs.
+7. **Cleaning uses the same list.** Each line changes to "Cleaned" in turn.
+   The free-space value counts up. The result gives the time, the change of
+   free space, the skipped items with their reason and the next step.
+
+Targets to measure in the first step, not promises: the first area result in
+0.3 s, a Smart scan in less than 10 s on a developer Mac with a warm cache,
+and no frame without movement for more than 1 s.
+
+Flow for "Choose items" and "Deep scan": the same scan screen, then the
+grouped review list, then confirmation, then the same result page with
+"Review remaining" and the log.
 
 Not planned: `/Library/Caches`, `/private/var`, language files, universal
 binary thinning and any "optimize" action. They need root or break code
@@ -210,7 +284,7 @@ Views:
 
 ```text
 handbyte                  Home screen (interactive)
-handbyte clean            Clean review        [--scope] [--min] [--dry-run] [--rm] [--json]
+handbyte clean            Smart Clean         [--review] [--deep] [--yes] [--dry-run] [--json]
 handbyte apps             App list            [--unused] [--json]
 handbyte uninstall <app>  Uninstall review    [--with-data] [--dry-run]
 handbyte analyze [path]   Storage drill-down  [--json]
@@ -218,6 +292,12 @@ handbyte history          Past actions        [--json]
 handbyte restore <id>     Restore a Trash action
 handbyte config           Roots and protected paths
 ```
+
+`handbyte clean` is not a full-screen program. It prints the area lines in
+place, as Mole does, and stays in the scrollback: scan, a three-line summary
+(safe, needs review, skipped), one key to confirm, the cleaning lines and the
+result. Enter confirms here, because only Safe items are in scope. `r` opens
+the full-screen "Choose items" view and `d` starts a deep scan.
 
 Every interactive screen has a `--json` form that prints the same data and
 never acts. The present flags (`--scan-only`, `--explore`, `--scope`,
@@ -246,9 +326,10 @@ A terminal has one font size. Hierarchy comes from five levels of weight and
 tone: bold bright (the number that matters), bold (titles, the current row),
 normal (names), dim (meta, paths), dim upper case (group labels).
 
-Color has meaning and is never the only signal: violet for the cursor and the
-primary action, green for Safe, amber for Review, grey for Protected, red only
-in a permanent deletion confirmation. Storage categories use the same hues as
+Color has meaning and is never the only signal: a white chip for the primary
+action, a neutral band for the cursor row, green for Safe, progress and done,
+amber for Review, grey for Protected, red only in a permanent deletion
+confirmation. Storage categories use the same hues as
 the app. The palette has a dark and a light variant (Mole issue 1296 reports
 unreadable grey on light terminals), falls back to 256 and 16 colors, and
 obeys `NO_COLOR`. Without color, glyphs and brackets carry all states.
@@ -261,8 +342,9 @@ obeys `NO_COLOR`. Without color, glyphs and brackets carry all states.
   label names the result ("review 3 items", "open dev/").
 - Empty and blocked states say what to do next ("Give your terminal Full Disk
   Access, then press r").
-- Destructive confirmations need `y`. Enter never confirms. A permanent
-  deletion needs the typed word.
+- Enter confirms Smart Clean only. Confirmations that include Review items,
+  apps or collected files need `y`. A permanent deletion of such items needs
+  the typed word.
 - The first run shows three lines: what a tier means, that nothing is
   preselected, and that the Trash is the default.
 - Mouse: click, wheel and row highlight under the pointer are on. A setting
@@ -272,10 +354,15 @@ obeys `NO_COLOR`. Without color, glyphs and brackets carry all states.
 
 ### Structure
 
-- `NavigationSplitView`: sidebar (five sections, a volume meter at the
-  bottom), content, and an inspector on the right for the focused item.
-- Clean, Apps and Storage share one screen pattern: header with summary,
-  filter row (segmented control and search), list, inspector, action bar.
+- No sidebar. A slim top bar holds the mark, five pill tabs and the command
+  field. The window is one column, so it feels like a utility, not a
+  workspace. The default window is small (about 880 by 620).
+- Overview is one centered statement: the number that can be cleaned, one
+  pill button, two text links for the deeper modes, then the volume meter and
+  three cards.
+- "Choose items", Apps and Storage share one screen pattern: header with
+  summary, filter row (segmented control and search), list, inspector on the
+  right for the focused item, action bar.
 - A command palette on ⌘K lists sections and actions. The keys match the CLI
   where a match exists (`/` filter, Space select, ⌘R rescan).
 - The system frame stays native (window, toolbar, sidebar material). Custom
@@ -287,13 +374,22 @@ obeys `NO_COLOR`. Without color, glyphs and brackets carry all states.
 A new `HandbyteDesign` target holds the tokens and the components. No view
 uses a raw color, font or duration.
 
-- Color: neutral graphite surfaces, one violet accent, three tier colors, six
-  category colors, each with a dark and a light value. Text contrast is at
-  least 4.5:1.
-- Type: SF Pro in seven steps (hero 40, title 20, head 14, body 13, meta 12,
-  label 11 upper case, mono 12). All numbers use tabular figures.
-- Shape: radius 6 for controls and rows, 8 for fields, 12 for cards. Hairline
-  borders. No shadow, except on the palette and on sheets.
+- Direction: ink on paper with one green signal. The first proposal used a
+  violet accent on graphite with a sidebar. It looked like a project tool and
+  felt heavy, so it was dropped.
+- Color: white or near-black ground, soft grey fills in place of outlines.
+  The primary action is ink (black on light, white on dark). Green is the
+  only brand color and means safe, progress and done. Amber and grey are the
+  other two tiers. Six category colors are used in meters and maps only.
+  Each token has a light and a dark value. Text contrast is at least 4.5:1.
+- Type: SF Pro in seven steps (hero 64, title 20, head 14, body 13, meta 12,
+  label 11 upper case, mono 12). All numbers use tabular figures. The hero
+  number is the main visual element of Overview and Smart Clean.
+- Shape: full pills for the main button, tabs, search and segmented controls.
+  Radius 8 for rows and small buttons, 16 for cards. Cards have a fill and no
+  border. No shadow, except on the palette and on sheets.
+- Speed in the UI: no modal sheet in Smart Clean, no page change between scan,
+  confirm, clean and result, and state changes of 120 to 220 ms.
 - Components: button (primary, secondary, ghost, danger), row, checkbox, tier
   badge, segmented control, search field, size bar, meter, treemap tile,
   toast, empty state.
@@ -305,18 +401,37 @@ disabled. The token sheet on the canvas shows them.
 
 | Element | Hover | Other feedback |
 | --- | --- | --- |
-| Sidebar item | Tint. The icon moves 1 pt. | The current item keeps the tint and gains an accent rail |
-| Button | Lighter fill. The primary button gains a soft ring. | Pressed: 1 pt down, 98.5% scale |
+| Tab | Tint. The icon rises 1 pt. | The current tab keeps the tint and uses a heavier weight |
+| Button | Stronger fill. The primary button gains a soft ring. The large pill rises 1 pt. | Pressed: 1 pt down, 98.5% scale |
+| Text link | The underline and the text darken | |
 | List row | Tint. The checkbox border brightens. Reveal and Protect buttons slide in. The size brightens. | Focused row: accent tint. Protected row: dashed box and a reason. |
 | Card | Stronger border, 1 pt lift. The arrow moves 3 pt. | |
 | Meter segment, treemap tile | Brighter, slightly larger, tooltip with name and size | A click focuses the matching list row |
 | Checkbox | | Accent fill with a short pop. The total in the action bar counts to the new value. |
-| Scan | | Categories fill as results arrive. A partial size has a trailing `+`. |
-| Cleanup result | | The free-space number counts up once. A toast offers Restore for 8 seconds. |
+| Scan | | See "Waiting states". Area lines change state in place. The spinner, the skeleton and the live dot are the only looping animations. |
+| Cleanup result | | The free-space number counts up once. Actions that used the Trash show Restore for 8 seconds. |
 
 Timing: 120 ms for color, 160 ms for movement, 80 ms for a press. With Reduce
 Motion, color changes stay and movement stops. Every hover action also has a
 keyboard path and a context menu entry.
+
+### Logo
+
+The canvas shows three directions. Recommended: **A, "Bite"**. It is a
+rounded block of storage with a round bite out of the top right corner, and a
+small green square, the byte that left. It shows freed space without a broom
+or a disk, the word "bite" echoes "byte", and the shape is clear at 16 px.
+
+- Colors: ink and one green. No gradient.
+- App icon: the mark in white on an ink squircle. A light variant is in the
+  canvas.
+- Wordmark: the mark, then "handbyte" in lower case, weight 650, tight
+  tracking.
+- Terminal: two cells, `▙▝`, then the name in bold.
+
+Directions B (a lower-case h with the byte) and C (three rows, the top one
+trimmed) are in the canvas for comparison. After the choice, redraw
+`scripts/render-app-icon.swift`, the favicon and the website header.
 
 ## Architecture
 
@@ -358,19 +473,25 @@ user data.
 
 ## Open decisions
 
-1. **Core strategy.** Recommended: two native cores, with a shared catalog and
+1. **How Smart Clean removes Safe items.** Recommended: direct removal, so
+   that the freed number is real, with the setting "Always use the Trash".
+   Alternative: the Trash for all items, as today. Then one step frees no
+   space until the Trash is emptied, and the result must offer "Empty these
+   items now".
+2. **Logo.** Recommended: direction A, "Bite".
+3. **Core strategy.** Recommended: two native cores, with a shared catalog and
    shared fixtures. Alternative: the app embeds the Go engine and reads JSON
    events from it. That gives one implementation, but it adds a signed helper
    binary and a process boundary for progress and cancellation, and the app
    was moved to an independent Swift core one release ago.
-2. **Admin-owned leftovers.** Recommended: list them and open Finder in the
+4. **Admin-owned leftovers.** Recommended: list them and open Finder in the
    first release. Alternative: a privileged helper with a narrow, validated
    path interface. That is more complete, and it adds a large security
    surface.
-3. **Scope of Clean.** Recommended: user-level rules only, as listed. This
+5. **Scope of Clean.** Recommended: user-level rules only, as listed. This
    excludes system caches, which other tools offer.
-4. **Storage view in the app.** Recommended: treemap with a side list.
+6. **Storage view in the app.** Recommended: treemap with a side list.
    Alternative: sunburst.
-5. **Sequence.** Recommended: Storage before Clean and Apps, because both use
+7. **Sequence.** Recommended: Storage before Clean and Apps, because both use
    the engine. Alternative: Apps first, if uninstall is the most wanted
    feature.
