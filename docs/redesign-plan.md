@@ -472,18 +472,23 @@ keyboard path and a context menu entry.
 
 ### Logo
 
-Direction: **"Bite"**. It is a rounded block of storage with a round bite
-out of the top right corner, and a green rounded square in the bite: the
+Direction: **"Bite"**. It is a rounded block of storage with a piece cut
+out of the top right corner, and a green rounded square in the cut: the
 byte that left. It shows freed space without a broom or a disk, and the word
 "bite" echoes "byte".
 
-The first drawing had a small byte that went over the outline of the block.
-That is the shape of an unread badge. The canvas shows two larger drawings:
+The first drawing had a small byte that went over the outline of the block,
+which is the shape of an unread badge. Its round bite also did not fit the
+square byte. The canvas shows the drawings that correct this:
 
-- **A1, Larger** (recommended): bite radius 24 and byte 17 on a 64 grid
-  (before: 17 and 12). The byte stays inside the outline of the block.
-- **A2, Largest**: bite radius 27 and byte 19. The clearest byte at 16 px,
-  but the block starts to lose its square shape.
+- **B1, Fitted cut** (recommended): the cut is a square with a small inner
+  radius, at an equal distance from the byte on both sides. On a 64 grid:
+  byte 19 with radius 6.5, gap 4.5, inner radius 11. The two parts together
+  make the full rounded square.
+- **B2, Fitted cut, outer corner**: the same cut. The outer corner of the
+  byte takes a larger radius, nearer to that of the block.
+- **A1, Round bite**: a larger round bite (radius 24) with a byte of 17.
+  Kept for comparison.
 
 Other directions were tried and set aside: a letter h, three trimmed rows,
 and two capsule bars (before and after).
@@ -555,4 +560,4 @@ Decided on 2026-11-10:
 
 Open:
 
-1. **Logo drawing.** Proposed: A1. Alternative: A2.
+1. **Logo drawing.** Proposed: B1. Alternatives: B2, A1.
