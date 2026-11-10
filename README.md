@@ -70,28 +70,72 @@ sudo rm "$(command -v handbyte)"
 ## Usage
 
 ```sh
-handbyte                         # Review candidates in the terminal
-handbyte --dry-run               # Preview; no cleanup actions
-handbyte --scope=quick           # Known caches and Xcode data
-handbyte --scope=projects        # Project artifacts only
-handbyte --explore=~/Downloads   # Read-only directory explorer
-handbyte --min=200M              # Minimum candidate size
-handbyte --roots=~/work          # Override project roots for this scan
-handbyte --roots=~/work --save-roots
-handbyte --no-projects           # Skip project artifact discovery
-handbyte --protect=~/work/keep    # Save a protected path
-handbyte --unprotect=~/work/keep  # Remove that exact protection
-handbyte --scan-only             # JSON inventory with coverage and eligibility
-handbyte --history               # Local action records as JSON
-handbyte --restore=ACTION_ID     # Restore a recorded Trash action
-handbyte --rm                    # Explicit permanent deletion mode
+handbyte                           # Home screen: Clean, Analyze, History
+handbyte clean                     # Smart Clean: scan, confirm once, clean the safe items
+handbyte clean --yes               # The same without the confirmation
+handbyte clean --dry-run           # Preview; no cleanup actions
+handbyte clean --review            # Choose the items yourself in the full list
+handbyte clean --deep              # Also scan the project roots, then choose
+handbyte clean --trash             # Move everything to the Trash, also caches
+handbyte clean --review --scope=projects    # Project artifacts only
+handbyte clean --min=200M          # Minimum candidate size
+handbyte clean --roots=~/work      # Override project roots for this scan
+handbyte clean --no-projects       # Skip project artifact discovery
+handbyte clean --json              # JSON inventory with coverage and eligibility
+handbyte clean --rm                # Delete everything directly, not through the Trash
+handbyte clean --system            # Old system logs; the unified log after its own question (asks for your password)
+handbyte analyze ~/Downloads       # Folders by size and the largest files (--json for JSON)
+handbyte apps                      # Apps by size and last use; uninstall; leftovers
+handbyte apps --unused --json      # Apps not opened for six months, as JSON
+handbyte uninstall Slack           # Review an app and its files, then move them to the Trash
+handbyte uninstall Slack --reset   # Keep the app, remove its files
+handbyte uninstall slack --brew --yes  # Homebrew app: brew uninstall --cask, then its files
+handbyte history                   # Local action records (--json for JSON)
+handbyte restore ACTION_ID         # Restore a recorded Trash action, or all items of one uninstall
+handbyte config                    # Show project roots and protected paths
+handbyte config roots ~/work       # Save project roots
+handbyte config protect ~/work/keep     # Save a protected path
+handbyte config unprotect ~/work/keep   # Remove that exact protection
+handbyte config mouse off          # No mouse in the full-screen views
+handbyte help                      # All commands and options
 ```
 
-The start screen offers Quick cleanup, Project cleanup, and Explore storage.
+Smart Clean shows one line for each area (Xcode build data, package
+manager caches, browser caches, app caches, logs) while it scans, then the
+total that is safe to clean, what needs review and what is skipped because
+its app runs. Enter cleans the safe items; `r` opens the full list and `d`
+adds the project roots. Data that rebuilds by itself is removed directly, so
+the freed space is real; everything else goes to the Trash.
+
+The home screen adapts to the terminal width and explains each entry. The
+review screen offers Quick cleanup, Project cleanup, and Explore storage.
 No items start selected. The default scan retains the existing `all` scope;
-`--roots` overrides saved roots without changing them unless `--save-roots` is
-also supplied. Default project roots are `~/dev`, `~/Projects`, `~/Code`, and
+`--roots` overrides saved roots for one scan, and `handbyte config roots`
+saves them. Default project roots are `~/dev`, `~/Projects`, `~/Code`, and
 `~/workspace`.
+
+In `handbyte analyze`, space picks a file or a folder and `c` reviews the
+picked items. They go to the Trash only, and each move is recorded, so
+`handbyte restore` puts it back. A folder that a cleanup rule covers points
+to `handbyte clean` instead. Standard folders such as `~/Documents` and
+private data such as `~/Library/Keychains` cannot be picked.
+
+`handbyte apps` lists the apps in `/Applications` and `~/Applications` with
+the source (App Store, Homebrew, Setapp, direct), the last use that Spotlight
+knows ("unknown" is not "never"), the architectures and the size. An
+uninstall review lists the files the app keeps in `~/Library`: a match by
+bundle ID is high, a match by the app name or by the Homebrew cask is medium,
+and a dot folder is low. Caches, logs and state are selected; the app's own
+data only with `--with-data`. The app and its files go to the Trash as one
+group, and `handbyte restore <group>` puts all of them back. Apps of macOS
+are not offered, a running app must quit first, and an app from Homebrew
+points to `brew uninstall --cask`. The Leftovers filter lists data of apps
+that are no longer installed, for review only.
+
+The options of earlier releases without a command (`handbyte --dry-run`,
+`--scan-only`, `--explore`, `--history`, `--restore`, `--protect`,
+`--unprotect`, `--save-roots`) still work in this release. Each one prints
+the command that replaces it.
 
 ## Review controls
 
@@ -172,9 +216,9 @@ On macOS, `config.json` and `actions.jsonl` live in
 `roots` and `exclusions`. An unreadable or invalid config stops cleanup; it is
 never treated as an empty protection list. Excluding a child also protects its
 ancestors from deletion. To remove a protection inherited from a parent, remove
-that exact parent path with `--unprotect`.
+that exact parent path with `handbyte config unprotect`.
 
-`--scan-only` keeps the existing `free_bytes` and `items` fields and adds
+`handbyte clean --json` keeps the existing `free_bytes` and `items` fields and adds
 `schema_version: 2`, `scan_status`, and `warnings`. Item fields now include owner,
 project, identity, eligibility, reason, activity and scan coverage. The old
 numeric `Safety` field remains for compatibility; use `Eligibility` for cleanup

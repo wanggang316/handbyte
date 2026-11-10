@@ -32,23 +32,11 @@ func ownerProcesses(it Item) []string {
 		return nil
 	}
 
-	switch it.Source {
-	case "go-build", "go-mod-cache":
-		return []string{"go", "gopls"}
-	case "npm-cache", "yarn-cache", "playwright", "cypress":
-		return []string{"node", "npm", "pnpm", "yarn", "bun", "chrome", "Chromium", "Cypress"}
-	case "cargo-registry", "cargo-git":
-		return []string{"cargo", "rustc", "rust-analyzer"}
-	case "xcode-derived", "xcode-devicesupport", "coresim-cache", "swiftpm-cache":
-		return []string{"Xcode", "xcodebuild", "swift", "swiftc", "SourceKitService", "Simulator", "CoreSimulatorService"}
-	case "gradle-cache":
-		return []string{"java", "gradle"}
-	case "brew-cache":
-		return []string{"brew", "ruby"}
-	case "jetbrains":
-		return []string{"idea", "pycharm", "goland", "clion", "rider", "webstorm", "java"}
-	case "codex":
-		return []string{"codex", "Codex"}
+	// Presets name their owner processes in the catalog.
+	for _, p := range Presets {
+		if p.Source == it.Source && len(p.Processes) > 0 {
+			return p.Processes
+		}
 	}
 	return nil
 }

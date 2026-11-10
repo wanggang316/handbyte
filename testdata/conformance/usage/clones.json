@@ -1,0 +1,18 @@
+{
+  "name": "a full clone counts once and the name that sorts first carries the size",
+  "files": [
+    {"path": "media/movie.mov", "bytes": 50000},
+    {"path": "media/song.mp3", "bytes": 7000}
+  ],
+  "clones": [
+    {"path": "media/a-copy.mov", "target": "media/movie.mov"}
+  ],
+  "expect": {
+    "files": 3,
+    "logicalBytes": 107000,
+    "children": [
+      {"name": "media", "dir": true, "files": 3, "logicalBytes": 107000}
+    ],
+    "largestFiles": ["media/a-copy.mov", "media/song.mp3", "media/movie.mov"]
+  }
+}

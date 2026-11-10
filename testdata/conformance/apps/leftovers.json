@@ -1,0 +1,61 @@
+{
+  "name": "leftovers: bundle ID names that no installed app has, without the system, shared libraries and vendors of installed apps",
+  "installed": [
+    "com.example.Live",
+    "org.example.Editor",
+    "com.jetbrains.goland"
+  ],
+  "installedNames": [
+    "Live",
+    "Editor",
+    "Cursor"
+  ],
+  "files": [
+    "Library/Application Support/com.example.Gone/db",
+    "Library/Application Support/com.example.Live/db",
+    "Library/Application Support/com.example.Live.helper/db",
+    "Library/Application Support/com.apple.Something/db",
+    "Library/Application Support/Some App/db",
+    "Library/Caches/net.oldsoft.Old/x",
+    "Library/Preferences/net.oldsoft.Old.plist",
+    "Library/Preferences/org.example.Editor.plist",
+    "Library/Saved Application State/net.oldsoft.Old.savedState/x",
+    "Library/Containers/io.twosoft.two/x",
+    "Library/Caches/two.parts/x",
+    "Library/Caches/com.crashlytics.data/x",
+    "Library/Application Support/net.other.Gone/db",
+    "Library/Caches/net.junk.file.dat",
+    "Library/Preferences/net.test.Runner.0C1984C0-6AB9-4D3E-8417-8072298D94A2.plist",
+    "Library/Application Support/jetbrains.go.252/x",
+    "Library/Application Support/com.cursor.renewal/x",
+    "Library/Containers/group.com.apple.notes/x",
+    "Library/Caches/net.example.Covered/x"
+  ],
+  "expect": [
+    {
+      "path": "Library/Application Support/net.other.Gone",
+      "bundleID": "net.other.Gone",
+      "class": "data"
+    },
+    {
+      "path": "Library/Caches/net.oldsoft.Old",
+      "bundleID": "net.oldsoft.Old",
+      "class": "cache"
+    },
+    {
+      "path": "Library/Containers/io.twosoft.two",
+      "bundleID": "io.twosoft.two",
+      "class": "data"
+    },
+    {
+      "path": "Library/Preferences/net.oldsoft.Old.plist",
+      "bundleID": "net.oldsoft.Old",
+      "class": "settings"
+    },
+    {
+      "path": "Library/Saved Application State/net.oldsoft.Old.savedState",
+      "bundleID": "net.oldsoft.Old",
+      "class": "state"
+    }
+  ]
+}

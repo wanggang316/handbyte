@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "categories": [
+    {"id": "apps", "title": "Apps", "paths": ["/Applications", "~/Applications", "~/Library/Application Support", "~/Library/Containers", "~/Library/Group Containers"]},
+    {"id": "developer", "title": "Developer", "projectRoots": true, "paths": ["~/Library/Developer", "~/Library/Application Support/Code", "~/Library/Application Support/JetBrains", "~/Library/Group Containers/HUAQ24HBR6.dev.orbstack", "~/Library/Containers/com.docker.docker", "~/Library/pnpm", "~/.bun", "~/.cache", "~/.cargo", "~/.cocoapods", "~/.deno", "~/.docker", "~/.gradle", "~/.m2", "~/.npm", "~/.nvm", "~/.orbstack", "~/.pyenv", "~/.rustup", "~/.vscode", "~/.yarn", "~/go"]},
+    {"id": "documents", "title": "Documents", "paths": ["~/Desktop", "~/Documents", "~/Downloads"]},
+    {"id": "media", "title": "Media", "paths": ["~/Movies", "~/Music", "~/Pictures"]},
+    {"id": "caches", "title": "Caches and logs", "paths": ["~/Library/Caches", "~/Library/Logs", "~/.Trash"]},
+    {"id": "other", "title": "Other", "paths": []}
+  ]
+}

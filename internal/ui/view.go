@@ -208,6 +208,9 @@ func (m *Model) renderConfirm() string {
 	if m.cleanMode == cleaner.ModeDryRun {
 		consequence = "Preview only. No cleanup actions will be applied."
 	}
+	if m.cleanMode == cleaner.ModeByData {
+		consequence = "Caches and build output that rebuild by themselves are removed. Other items go to the Trash."
+	}
 	lines := []string{titleStyle.Render("Review every selected target"), fmt.Sprintf("%s · %d items · %s estimated", m.actionLabel(), len(items), humanBytes(m.selectedTotal())), consequence, ""}
 	for i := start; i < end; i++ {
 		lines = append(lines, fmt.Sprintf("%3d %10s  %s", i+1, humanBytes(items[i].Size), display(condensePath(items[i].Path))))

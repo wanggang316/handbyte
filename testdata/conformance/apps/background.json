@@ -1,0 +1,98 @@
+{
+  "name": "background items, the signing team and files outside the home folder",
+  "app": {
+    "bundleID": "com.example.Sync",
+    "name": "Sync Pro",
+    "zap": [],
+    "bundle": "/Applications/Sync Pro.app",
+    "team": "ABCDE12345"
+  },
+  "others": [
+    "com.example.Other"
+  ],
+  "otherTeams": [
+    "ZZZZZ99999"
+  ],
+  "withData": false,
+  "files": [
+    "Library/Caches/com.example.Sync/x",
+    "Library/Group Containers/ABCDE12345.sync/x",
+    "Library/Group Containers/ZZZZZ99999.shared/x"
+  ],
+  "contents": {
+    "Library/LaunchAgents/com.vendor.helper.plist": "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>Label</key><string>x</string><key>ProgramArguments</key><array><string>/Applications/Sync Pro.app/Contents/Library/LoginItems/Helper.app/Contents/MacOS/Helper</string></array></dict></plist>",
+    "Library/LaunchAgents/com.other.agent.plist": "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>Label</key><string>x</string><key>ProgramArguments</key><array><string>/Applications/Other.app/Contents/MacOS/agent</string></array></dict></plist>",
+    "Library/LaunchAgents/com.vendor.old.plist": "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>Label</key><string>x</string><key>ProgramArguments</key><array><string>/Applications/Sync Pro.app.old/Contents/MacOS/agent</string></array></dict></plist>"
+  },
+  "systemFiles": [
+    "Library/LaunchDaemons/com.example.Sync.helper.plist",
+    "Library/PrivilegedHelperTools/com.example.Sync.helper",
+    "Library/Application Support/com.example.Sync/x",
+    "Library/Application Support/Sync Pro/x",
+    "Library/LaunchDaemons/com.other.daemon.plist",
+    "Library/PrivilegedHelperTools/dev.vendor.privhelper",
+    "Library/PrivilegedHelperTools/dev.vendor.other"
+  ],
+  "systemContents": {
+    "Library/LaunchAgents/com.vendor.updater.plist": "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>Label</key><string>x</string><key>ProgramArguments</key><array><string>/Applications/Sync Pro.app/Contents/MacOS/updater</string></array></dict></plist>",
+    "Library/LaunchDaemons/dev.vendor.privhelper.plist": "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>AssociatedBundleIdentifiers</key><array><string>com.example.Sync</string></array><key>Label</key><string>dev.vendor.privhelper</string><key>Program</key><string>/Library/PrivilegedHelperTools/dev.vendor.privhelper</string></dict></plist>",
+    "Library/LaunchDaemons/dev.vendor.other.plist": "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>AssociatedBundleIdentifiers</key><string>com.example.SyncOther</string><key>Program</key><string>/Library/PrivilegedHelperTools/dev.vendor.other</string></dict></plist>"
+  },
+  "expect": [
+    {
+      "path": "Library/Caches/com.example.Sync",
+      "class": "cache",
+      "confidence": "high",
+      "selected": true
+    },
+    {
+      "path": "Library/Group Containers/ABCDE12345.sync",
+      "class": "data",
+      "confidence": "medium",
+      "selected": false
+    },
+    {
+      "path": "Library/LaunchAgents/com.vendor.helper.plist",
+      "class": "state",
+      "confidence": "high",
+      "selected": true
+    }
+  ],
+  "expectSystem": [
+    {
+      "path": "Library/Application Support/Sync Pro",
+      "class": "data",
+      "confidence": "medium"
+    },
+    {
+      "path": "Library/Application Support/com.example.Sync",
+      "class": "data",
+      "confidence": "high"
+    },
+    {
+      "path": "Library/LaunchAgents/com.vendor.updater.plist",
+      "class": "state",
+      "confidence": "high"
+    },
+    {
+      "path": "Library/LaunchDaemons/com.example.Sync.helper.plist",
+      "class": "state",
+      "confidence": "high"
+    },
+    {
+      "path": "Library/LaunchDaemons/dev.vendor.privhelper.plist",
+      "class": "state",
+      "confidence": "high"
+    },
+    {
+      "path": "Library/PrivilegedHelperTools/com.example.Sync.helper",
+      "class": "state",
+      "confidence": "high"
+    },
+    {
+      "path": "Library/PrivilegedHelperTools/dev.vendor.privhelper",
+      "class": "state",
+      "confidence": "high"
+    }
+  ]
+}

@@ -15,9 +15,21 @@ const (
 	ModeRemove
 	// ModeDryRun reports what would happen but changes nothing.
 	ModeDryRun
+	// ModeByData removes rebuildable data directly, because its owner makes
+	// it again, and moves all other data to the Trash.
+	ModeByData
 )
 
-// Result is the outcome of cleaning one path.
+// Action returns what a mode does with one item: "remove" or "trash".
+func (m Mode) Action(it scanner.Item) string {
+	if m == ModeRemove || (m == ModeByData && it.Rebuildable) {
+		return "remove"
+	}
+	return "trash"
+}
+
+// Result is the outcome of cleaning one path. It is also the record of the
+// journal that the CLI and the app share; see journalPath.
 type Result struct {
 	ID            string
 	Destination   string
@@ -33,6 +45,13 @@ type Result struct {
 	Err           error `json:"-"`
 	StartedAt     time.Time
 	EndedAt       time.Time
+	// Group joins the actions of one uninstall, so that one restore puts
+	// all of them back.
+	Group string `json:",omitempty"`
+	// Rule is the catalog rule, "collected" or "app:<bundle ID>".
+	Rule string `json:",omitempty"`
+	// Tool is the product that wrote the record: "cli" or "app".
+	Tool string `json:",omitempty"`
 }
 
 // CanRestore reports whether the recorded outcome supports an in-app restore.

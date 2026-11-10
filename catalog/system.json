@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "system-crash-reports",
+      "title": "System crash and hang reports",
+      "root": "/Library/Logs/DiagnosticReports",
+      "names": [
+        "*.ips",
+        "*.diag",
+        "*.crash",
+        "*.hang",
+        "*.spin",
+        "*.panic"
+      ],
+      "minAgeDays": 30,
+      "summary": "Crash, hang and resource reports of system processes, older than 30 days.",
+      "recovery": "Not rebuilt; only old reports are lost. New reports are written when a process fails."
+    },
+    {
+      "id": "system-log-archives",
+      "title": "Rotated system logs",
+      "root": "/private/var/log",
+      "names": [
+        "*.gz",
+        "*.bz2"
+      ],
+      "minAgeDays": 7,
+      "summary": "Compressed old parts of system logs, older than 7 days.",
+      "recovery": "Not rebuilt; the current logs stay. macOS rotates logs again on its own."
+    },
+    {
+      "id": "system-library-logs",
+      "title": "Old logs of installers and services",
+      "root": "/Library/Logs",
+      "names": [
+        "*.log",
+        "*.gz",
+        "*.bz2"
+      ],
+      "minAgeDays": 30,
+      "summary": "Log files of installers and system services in /Library/Logs, older than 30 days.",
+      "recovery": "Not rebuilt; only old logs are lost. A log that is in use was written recently, so it stays."
+    },
+    {
+      "id": "system-unified-log",
+      "title": "Unified log of macOS",
+      "root": "/private/var/db/diagnostics",
+      "summary": "The log store that Console and the log command read: messages of all processes since the last erase.",
+      "recovery": "Not rebuilt. After the erase, Console and log show no messages from before. macOS writes new messages at once.",
+      "tier": "review",
+      "command": [
+        "/usr/bin/log",
+        "erase",
+        "--all"
+      ],
+      "measure": [
+        "/private/var/db/diagnostics"
+      ]
+    }
+  ]
+}

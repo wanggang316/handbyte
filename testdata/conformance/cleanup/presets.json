@@ -1,0 +1,71 @@
+{
+  "name": "presets are reported at their locations and missing locations are skipped",
+  "projectRoots": [],
+  "files": [
+    {
+      "path": "Library/Caches/Homebrew/downloads/a.tar.gz",
+      "bytes": 20000
+    },
+    {
+      "path": ".npm/_cacache/index-v5/00/a",
+      "bytes": 4096
+    },
+    {
+      "path": "Library/Developer/Xcode/DerivedData/App-abc/Build/a.o",
+      "bytes": 8192
+    },
+    {
+      "path": "Library/Developer/Xcode/DerivedData/Lib-def/Build/b.o",
+      "bytes": 8192
+    },
+    {
+      "path": "Library/Developer/Xcode/DerivedData/info.plist",
+      "bytes": 100
+    },
+    {
+      "path": "Library/Developer/Xcode/Archives/2026-01-01/App.xcarchive/Info.plist",
+      "bytes": 4096
+    },
+    {
+      "path": ".cargo/config.toml",
+      "bytes": 100
+    }
+  ],
+  "expect": [
+    {
+      "path": "Library/Caches/Homebrew",
+      "rule": "brew-cache",
+      "category": "dev-cache",
+      "safety": "safe",
+      "area": "packages"
+    },
+    {
+      "path": ".npm/_cacache",
+      "rule": "npm-cache",
+      "category": "dev-cache",
+      "safety": "safe",
+      "area": "packages"
+    },
+    {
+      "path": "Library/Developer/Xcode/DerivedData/App-abc",
+      "rule": "xcode-derived",
+      "category": "xcode",
+      "safety": "safe",
+      "area": "xcode"
+    },
+    {
+      "path": "Library/Developer/Xcode/DerivedData/Lib-def",
+      "rule": "xcode-derived",
+      "category": "xcode",
+      "safety": "safe",
+      "area": "xcode"
+    },
+    {
+      "path": "Library/Developer/Xcode/Archives",
+      "rule": "xcode-archives",
+      "category": "xcode",
+      "safety": "caution",
+      "area": "xcode"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "name": "journal records of the CLI and the app",
+  "lines": [
+    "{\"ID\":\"A\",\"Destination\":\"\",\"Message\":\"\",\"JournalError\":\"\",\"TrashIdentity\":{\"Device\":0,\"Inode\":0},\"FreeDelta\":null,\"Path\":\"/Users/alice/Library/Caches/com.example.Notes\",\"Freed\":0,\"Previewed\":0,\"Moved\":0,\"Status\":\"started\",\"StartedAt\":\"2026-11-10T16:15:00.123456789+08:00\",\"EndedAt\":\"0001-01-01T00:00:00Z\",\"Rule\":\"app-caches\",\"Tool\":\"cli\"}",
+    "{\"ID\":\"A\",\"Destination\":\"/Users/alice/.Trash/com.example.Notes\",\"Message\":\"\",\"JournalError\":\"\",\"TrashIdentity\":{\"Device\":16777232,\"Inode\":101},\"FreeDelta\":null,\"Path\":\"/Users/alice/Library/Caches/com.example.Notes\",\"Freed\":0,\"Previewed\":0,\"Moved\":4096,\"Status\":\"trashed\",\"StartedAt\":\"2026-11-10T16:15:00.123456789+08:00\",\"EndedAt\":\"2026-11-10T16:15:01.5+08:00\",\"Rule\":\"app-caches\",\"Tool\":\"cli\"}",
+    "{\"ID\":\"B\",\"Destination\":\"/Users/alice/.Trash/Notes.app\",\"Message\":\"\",\"JournalError\":\"\",\"TrashIdentity\":{\"Device\":16777232,\"Inode\":102},\"FreeDelta\":null,\"Path\":\"/Applications/Notes.app\",\"Freed\":0,\"Previewed\":0,\"Moved\":0,\"Status\":\"trashed\",\"StartedAt\":\"2026-11-10T16:15:00.123456789+08:00\",\"EndedAt\":\"2026-11-10T16:15:01.5+08:00\",\"Group\":\"app-7k2\",\"Rule\":\"app:com.example.Notes\",\"Tool\":\"cli\"}",
+    "{\"ID\":\"C\",\"Destination\":\"/Users/alice/.Trash/Notes\",\"Message\":\"\",\"JournalError\":\"\",\"TrashIdentity\":{\"Device\":16777232,\"Inode\":103},\"FreeDelta\":null,\"Path\":\"/Users/alice/Library/Logs/Notes\",\"Freed\":0,\"Previewed\":0,\"Moved\":512,\"Status\":\"trashed\",\"StartedAt\":\"2026-11-10T16:15:00.123456789+08:00\",\"EndedAt\":\"2026-11-10T16:15:01.5+08:00\",\"Group\":\"app-7k2\",\"Rule\":\"app:com.example.Notes\",\"Tool\":\"cli\"}",
+    "{\"ID\":\"D\",\"Path\":\"/Users/alice/Downloads/old.dmg\",\"Status\":\"trashed\",\"StartedAt\":\"2026-11-10T08:20:00.250Z\",\"EndedAt\":\"2026-11-10T08:20:00.250Z\",\"Rule\":\"collected\",\"Tool\":\"app\",\"Destination\":\"/Users/alice/.Trash/old.dmg\",\"TrashIdentity\":{\"Device\":16777232,\"Inode\":104},\"Moved\":2048,\"Group\":\"app-9x\"}",
+    "{\"ID\":\"E\",\"Destination\":\"\",\"Message\":\"\",\"JournalError\":\"\",\"TrashIdentity\":{\"Device\":0,\"Inode\":0},\"FreeDelta\":null,\"Path\":\"/Users/alice/Library/Developer/Xcode/DerivedData\",\"Freed\":8192,\"Previewed\":0,\"Moved\":0,\"Status\":\"removed\",\"StartedAt\":\"2026-11-10T16:15:00.123456789+08:00\",\"EndedAt\":\"2026-11-10T16:15:01.5+08:00\",\"Rule\":\"xcode-derived\",\"Tool\":\"cli\"}",
+    "{\"ID\":\"D\",\"Path\":\"/Users/alice/Downloads/old.dmg\",\"Status\":\"restored\",\"StartedAt\":\"2026-11-10T08:20:00.250Z\",\"EndedAt\":\"2026-11-10T08:20:00.250Z\",\"Rule\":\"collected\",\"Tool\":\"app\",\"Destination\":\"/Users/alice/.Trash/old.dmg\",\"TrashIdentity\":{\"Device\":16777232,\"Inode\":104},\"Moved\":2048,\"Group\":\"app-9x\"}",
+    "{\"ID\":\"F\",\"Destination\":\"\",\"Message\":\"\",\"JournalError\":\"\",\"TrashIdentity\":{\"Device\":0,\"Inode\":0},\"FreeDelta\":null,\"Path\":\"/Users/alice/.npm/_cacache\",\"Freed\":0,\"Previewed\":0,\"Moved\":0,\"Status\":\"started\",\"StartedAt\":\"2026-11-10T16:15:00.123456789+08:00\",\"EndedAt\":\"0001-01-01T00:00:00Z\",\"Rule\":\"npm-cache\",\"Tool\":\"cli\"}",
+    "{\"ID\":\"H\",\"Destination\":\"/Users/alice/.Trash/a.mov\",\"Message\":\"Moved to Trash; destination identity unavailable. Restore in Finder.\",\"JournalError\":\"\",\"TrashIdentity\":{\"Device\":0,\"Inode\":0},\"FreeDelta\":null,\"Path\":\"/Users/alice/Movies/a.mov\",\"Freed\":0,\"Previewed\":0,\"Moved\":100,\"Status\":\"trashed\",\"StartedAt\":\"2026-11-10T16:15:00.123456789+08:00\",\"EndedAt\":\"2026-11-10T16:15:01.5+08:00\",\"Rule\":\"collected\",\"Tool\":\"cli\"}",
+    "{\"ID\":\"I\",\"Path\":\"/Users/alice/Library/Caches/com.example.Mail\",\"Status\":\"failed\",\"StartedAt\":\"2026-11-10T08:20:00.250Z\",\"EndedAt\":\"2026-11-10T08:20:00.250Z\",\"Rule\":\"app-caches\",\"Tool\":\"app\",\"Message\":\"Operation not permitted\"}",
+    "{\"ID\":\"J\",\"Destination\":\"\",\"Message\":\"the app runs\",\"JournalError\":\"\",\"TrashIdentity\":{\"Device\":0,\"Inode\":0},\"FreeDelta\":null,\"Path\":\"/Users/alice/Library/Caches/com.example.Web\",\"Freed\":0,\"Previewed\":0,\"Moved\":0,\"Status\":\"skipped\",\"StartedAt\":\"2026-11-10T16:15:00.123456789+08:00\",\"EndedAt\":\"2026-11-10T16:15:01.5+08:00\",\"Rule\":\"app-caches\",\"Tool\":\"cli\"}"
+  ],
+  "expect": [
+    {
+      "id": "A",
+      "status": "trashed",
+      "outcome": "moved",
+      "canRestore": true,
+      "group": "",
+      "bytes": 4096
+    },
+    {
+      "id": "B",
+      "status": "trashed",
+      "outcome": "moved",
+      "canRestore": true,
+      "group": "app-7k2",
+      "bytes": 0
+    },
+    {
+      "id": "C",
+      "status": "trashed",
+      "outcome": "moved",
+      "canRestore": true,
+      "group": "app-7k2",
+      "bytes": 512
+    },
+    {
+      "id": "D",
+      "status": "restored",
+      "outcome": "restored",
+      "canRestore": false,
+      "group": "app-9x",
+      "bytes": 2048
+    },
+    {
+      "id": "E",
+      "status": "removed",
+      "outcome": "removed",
+      "canRestore": false,
+      "group": "",
+      "bytes": 8192
+    },
+    {
+      "id": "F",
+      "status": "started",
+      "outcome": "failed",
+      "canRestore": false,
+      "group": "",
+      "bytes": 0
+    },
+    {
+      "id": "H",
+      "status": "trashed",
+      "outcome": "moved",
+      "canRestore": false,
+      "group": "",
+      "bytes": 100
+    },
+    {
+      "id": "I",
+      "status": "failed",
+      "outcome": "failed",
+      "canRestore": false,
+      "group": "",
+      "bytes": 0
+    },
+    {
+      "id": "J",
+      "status": "skipped",
+      "outcome": "none",
+      "canRestore": false,
+      "group": "",
+      "bytes": 0
+    }
+  ]
+}

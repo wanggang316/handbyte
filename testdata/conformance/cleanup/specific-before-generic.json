@@ -1,0 +1,45 @@
+{
+  "name": "a directory that two rules reach is reported once, by the more specific rule",
+  "projectRoots": [],
+  "files": [
+    {
+      "path": "Library/Caches/go-build/00/a",
+      "bytes": 8192
+    },
+    {
+      "path": "Library/Caches/com.example.app/Cache.db",
+      "bytes": 8192
+    },
+    {
+      "path": "Library/Caches/loose-file",
+      "bytes": 4096
+    },
+    {
+      "path": "Library/Logs/Example/app.log",
+      "bytes": 4096
+    }
+  ],
+  "expect": [
+    {
+      "path": "Library/Caches/go-build",
+      "rule": "go-build",
+      "category": "dev-cache",
+      "safety": "safe",
+      "area": "packages"
+    },
+    {
+      "path": "Library/Caches/com.example.app",
+      "rule": "library-caches",
+      "category": "system-cache",
+      "safety": "safe",
+      "area": "apps"
+    },
+    {
+      "path": "Library/Logs/Example",
+      "rule": "library-logs",
+      "category": "trash",
+      "safety": "safe",
+      "area": "logs"
+    }
+  ]
+}

@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "applicationRoots": [
+    "/Applications",
+    "~/Applications"
+  ],
+  "locations": [
+    {
+      "path": "~/Library/Application Support/{bundleID}",
+      "class": "data"
+    },
+    {
+      "path": "~/Library/Application Support/{name}",
+      "class": "data"
+    },
+    {
+      "path": "~/Library/Caches/{bundleID}",
+      "class": "cache"
+    },
+    {
+      "path": "~/Library/Caches/{name}",
+      "class": "cache"
+    },
+    {
+      "path": "~/Library/Caches/{bundleID}.ShipIt",
+      "class": "cache"
+    },
+    {
+      "path": "~/Library/HTTPStorages/{bundleID}",
+      "class": "cache"
+    },
+    {
+      "path": "~/Library/HTTPStorages/{bundleID}.binarycookies",
+      "class": "state"
+    },
+    {
+      "path": "~/Library/WebKit/{bundleID}",
+      "class": "cache"
+    },
+    {
+      "path": "~/Library/Logs/{bundleID}",
+      "class": "logs"
+    },
+    {
+      "path": "~/Library/Logs/{name}",
+      "class": "logs"
+    },
+    {
+      "path": "~/Library/Preferences/{bundleID}.plist",
+      "class": "settings"
+    },
+    {
+      "path": "~/Library/Preferences/ByHost/{bundleID}.*",
+      "class": "settings"
+    },
+    {
+      "path": "~/Library/Saved Application State/{bundleID}.savedState",
+      "class": "state"
+    },
+    {
+      "path": "~/Library/Containers/{bundleID}",
+      "class": "data"
+    },
+    {
+      "path": "~/Library/Application Scripts/{bundleID}",
+      "class": "state"
+    },
+    {
+      "path": "~/Library/Group Containers/*.{bundleID}",
+      "class": "data"
+    },
+    {
+      "path": "~/Library/Group Containers/{team}.*",
+      "class": "data"
+    },
+    {
+      "path": "~/Library/LaunchAgents/{bundleID}.*",
+      "class": "state"
+    },
+    {
+      "path": "~/Library/LaunchAgents/{bundleID}.plist",
+      "class": "state"
+    },
+    {
+      "path": "~/.{lowername}",
+      "class": "data"
+    }
+  ],
+  "systemLocations": [
+    {
+      "path": "/Library/Application Support/{bundleID}",
+      "class": "data"
+    },
+    {
+      "path": "/Library/Application Support/{name}",
+      "class": "data"
+    },
+    {
+      "path": "/Library/Caches/{bundleID}",
+      "class": "cache"
+    },
+    {
+      "path": "/Library/Logs/{name}",
+      "class": "logs"
+    },
+    {
+      "path": "/Library/Preferences/{bundleID}.plist",
+      "class": "settings"
+    },
+    {
+      "path": "/Library/LaunchAgents/{bundleID}.*",
+      "class": "state"
+    },
+    {
+      "path": "/Library/LaunchDaemons/{bundleID}.*",
+      "class": "state"
+    },
+    {
+      "path": "/Library/PrivilegedHelperTools/{bundleID}.*",
+      "class": "state"
+    },
+    {
+      "path": "/Library/PrivilegedHelperTools/{bundleID}",
+      "class": "state"
+    }
+  ],
+  "launchdFolders": [
+    "~/Library/LaunchAgents",
+    "/Library/LaunchAgents",
+    "/Library/LaunchDaemons"
+  ],
+  "leftoverRoots": [
+    "~/Library/Application Support",
+    "~/Library/Caches",
+    "~/Library/Containers",
+    "~/Library/HTTPStorages",
+    "~/Library/Logs",
+    "~/Library/Saved Application State",
+    "~/Library/Preferences"
+  ],
+  "genericNames": [
+    "app",
+    "apps",
+    "application",
+    "applications",
+    "cache",
+    "caches",
+    "code",
+    "data",
+    "default",
+    "helper",
+    "logs",
+    "settings",
+    "support",
+    "temp",
+    "tmp",
+    "update",
+    "updater",
+    "user",
+    "web"
+  ],
+  "protectedPrefixes": [
+    "com.apple.",
+    "group.com.apple.",
+    "systemgroup.com.apple.",
+    "org.cups."
+  ],
+  "leftoverIgnorePrefixes": [
+    "com.crashlytics",
+    "com.bugsnag",
+    "bugsnag-",
+    "io.sentry",
+    "com.onevcat.Kingfisher",
+    "org.sparkle-project",
+    "com.microsoft.autoupdate",
+    "com.google.Keystone",
+    "com.google.GoogleUpdater",
+    "com.firebase",
+    "com.segment",
+    "com.amplitude",
+    "com.plausiblelabs",
+    "KSCrash",
+    "SentryCrash",
+    "org.swift.swiftpm",
+    "org.webkit.Playwright",
+    "org.chromium.Chromium"
+  ]
+}

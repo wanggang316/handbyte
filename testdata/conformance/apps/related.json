@@ -1,0 +1,43 @@
+{
+  "name": "files of an app: bundle ID matches are high, name and cask matches are medium, dot folders are low",
+  "app": {"bundleID": "com.example.Notes", "name": "Notes Pro", "zap": ["~/Library/Application Support/NotesProData", "/Library/Application Support/NotesPro"]},
+  "others": ["com.example.Notes.helper", "com.example.NotesKit"],
+  "withData": false,
+  "files": [
+    "Library/Application Support/com.example.Notes/db.sqlite",
+    "Library/Application Support/Notes Pro/state.json",
+    "Library/Application Support/NotesProData/blob",
+    "Library/Caches/com.example.Notes/Cache.db",
+    "Library/Caches/com.example.Notes.ShipIt/update.zip",
+    "Library/Caches/com.example.Notes.helper/x",
+    "Library/Caches/com.example.NotesKit/x",
+    "Library/Caches/com.example.NotesOther/x",
+    "Library/HTTPStorages/com.example.Notes.binarycookies",
+    "Library/Preferences/com.example.Notes.plist",
+    "Library/Preferences/com.example.NotesKit.plist",
+    "Library/Preferences/ByHost/com.example.Notes.ABCDEF.plist",
+    "Library/Saved Application State/com.example.Notes.savedState/windows.plist",
+    "Library/Containers/com.example.Notes/Data/x",
+    "Library/Group Containers/TEAM123.com.example.Notes/x",
+    "Library/Logs/Notes Pro/app.log",
+    "Library/LaunchAgents/com.example.Notes.updater.plist",
+    ".notespro/config",
+    "Library/Caches/Notes/x"
+  ],
+  "expect": [
+    {"path": ".notespro", "class": "data", "confidence": "low", "selected": false},
+    {"path": "Library/Application Support/Notes Pro", "class": "data", "confidence": "medium", "selected": false},
+    {"path": "Library/Application Support/NotesProData", "class": "data", "confidence": "medium", "selected": false},
+    {"path": "Library/Application Support/com.example.Notes", "class": "data", "confidence": "high", "selected": false},
+    {"path": "Library/Caches/com.example.Notes", "class": "cache", "confidence": "high", "selected": true},
+    {"path": "Library/Caches/com.example.Notes.ShipIt", "class": "cache", "confidence": "high", "selected": true},
+    {"path": "Library/Containers/com.example.Notes", "class": "data", "confidence": "high", "selected": false},
+    {"path": "Library/Group Containers/TEAM123.com.example.Notes", "class": "data", "confidence": "high", "selected": false},
+    {"path": "Library/HTTPStorages/com.example.Notes.binarycookies", "class": "state", "confidence": "high", "selected": true},
+    {"path": "Library/LaunchAgents/com.example.Notes.updater.plist", "class": "state", "confidence": "high", "selected": true},
+    {"path": "Library/Logs/Notes Pro", "class": "logs", "confidence": "medium", "selected": true},
+    {"path": "Library/Preferences/ByHost/com.example.Notes.ABCDEF.plist", "class": "settings", "confidence": "high", "selected": true},
+    {"path": "Library/Preferences/com.example.Notes.plist", "class": "settings", "confidence": "high", "selected": true},
+    {"path": "Library/Saved Application State/com.example.Notes.savedState", "class": "state", "confidence": "high", "selected": true}
+  ]
+}

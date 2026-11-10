@@ -3,17 +3,22 @@ package cleaner
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/wanggang316/handbyte/internal/scanner"
 	"github.com/wanggang316/handbyte/internal/settings"
 )
 
+// journalPath is the journal that the CLI and the app share:
+// ~/Library/Application Support/handbyte/actions.jsonl. Each line is one
+// Result as JSON; the last line of an ID is its present state.
 func journalPath() (string, error) {
 	dir, err := settings.Dir()
 	if err != nil {
@@ -53,6 +58,9 @@ func appendJournal(result Result) error {
 		if last[0] != '\n' {
 			return errors.New("journal has an unterminated record")
 		}
+	}
+	if result.Tool == "" {
+		result.Tool = "cli"
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
@@ -97,8 +105,36 @@ func History() ([]Result, error) {
 	return results, lines.Err()
 }
 
-// Restore refuses replacement of an existing path and checks the Trash identity.
+// Restore puts back the action with this ID, or every action of the group
+// with this ID. It refuses replacement of an existing path and checks the
+// Trash identity.
 func Restore(ctx context.Context, id string) error {
+	history, err := History()
+	if err != nil {
+		return err
+	}
+	var group []string
+	for _, r := range history {
+		if r.Group == id && r.Group != "" && r.Status == "trashed" {
+			group = append(group, r.ID)
+		}
+	}
+	if len(group) == 0 {
+		return restoreOne(ctx, id)
+	}
+	var failed []string
+	for _, member := range group {
+		if err := restoreOne(ctx, member); err != nil {
+			failed = append(failed, err.Error())
+		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("%d of %d items were not restored: %s", len(failed), len(group), strings.Join(failed, "; "))
+	}
+	return nil
+}
+
+func restoreOne(ctx context.Context, id string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -113,7 +149,9 @@ func Restore(ctx context.Context, id string) error {
 		if r.Status != "trashed" || r.Destination == "" || r.TrashIdentity.Inode == 0 {
 			return errors.New("action has no verified Trash destination")
 		}
-		actual, err := scanner.CaptureIdentity(r.Destination)
+		// A collected item can be a file; EntryIdentity accepts files and
+		// folders and refuses a symbolic link.
+		actual, err := scanner.EntryIdentity(r.Destination)
 		if err != nil {
 			return err
 		}
@@ -149,4 +187,11 @@ func Restore(ctx context.Context, id string) error {
 		return appendJournal(r)
 	}
 	return errors.New("action ID not found")
+}
+
+// RecordRemoved journals a removal that another program made, such as
+// brew uninstall. It cannot be restored.
+func RecordRemoved(path, rule string, size int64) error {
+	now := time.Now()
+	return appendJournal(Result{ID: rand.Text(), Path: path, Rule: rule, Status: "removed", Freed: size, StartedAt: now, EndedAt: now})
 }

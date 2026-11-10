@@ -85,11 +85,19 @@ func ruleAllows(it Item) bool {
 		case "library-caches", "library-logs", "xdg-cache", "trash", "rustup", "pnpm-store", "maven-cache":
 			continue
 		}
-		root, err := Physical(p.Path)
-		if err != nil {
+		template, ok := expandHome(p.Path)
+		if !ok {
 			continue
 		}
-		if (!p.ExpandChildren && it.Path == root) || (p.ExpandChildren && filepath.Dir(it.Path) == root) {
+		target := it.Path
+		if p.ExpandChildren {
+			target = filepath.Dir(it.Path)
+		}
+		// Resolve the parents of a wildcard location as the scan did.
+		if physical, err := Physical(template); err == nil {
+			template = physical
+		}
+		if matchTemplate(template, target) {
 			return true
 		}
 	}
@@ -227,4 +235,21 @@ func assess(ctx context.Context, it *Item, exclusions []string, probe ActivityPr
 		it.Eligibility = Recommended
 		it.Reason = "No owner process detected; file activity is older than 7 days"
 	}
+}
+
+// EntryIdentity binds a file or a directory to its filesystem object. It
+// refuses a symbolic link, so that an action never follows one.
+func EntryIdentity(path string) (Identity, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return Identity{}, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return Identity{}, errors.New("target is a symbolic link")
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return Identity{}, errors.New("file identity unavailable")
+	}
+	return Identity{Device: uint64(st.Dev), Inode: uint64(st.Ino)}, nil
 }

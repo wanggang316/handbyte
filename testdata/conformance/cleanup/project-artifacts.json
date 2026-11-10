@@ -1,0 +1,56 @@
+{
+  "name": "build output is found below a project root and a match is not entered",
+  "projectRoots": [
+    "~/dev"
+  ],
+  "files": [
+    {
+      "path": "dev/web/package.json",
+      "bytes": 200
+    },
+    {
+      "path": "dev/web/src/index.js",
+      "bytes": 200
+    },
+    {
+      "path": "dev/web/node_modules/left-pad/index.js",
+      "bytes": 4096
+    },
+    {
+      "path": "dev/web/node_modules/left-pad/node_modules/inner/index.js",
+      "bytes": 4096
+    },
+    {
+      "path": "dev/svc/Cargo.toml",
+      "bytes": 200
+    },
+    {
+      "path": "dev/svc/target/debug/svc",
+      "bytes": 16384
+    },
+    {
+      "path": "Projects/other/package.json",
+      "bytes": 200
+    },
+    {
+      "path": "Projects/other/node_modules/a/index.js",
+      "bytes": 4096
+    }
+  ],
+  "expect": [
+    {
+      "path": "dev/web/node_modules",
+      "rule": "artifact:node_modules",
+      "category": "project-build",
+      "safety": "review",
+      "area": "projects"
+    },
+    {
+      "path": "dev/svc/target",
+      "rule": "artifact:target",
+      "category": "project-build",
+      "safety": "review",
+      "area": "projects"
+    }
+  ]
+}

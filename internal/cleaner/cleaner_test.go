@@ -131,3 +131,46 @@ func TestExecuteRefusesCorruptJournal(t *testing.T) {
 		t.Fatalf("corrupt evidence changed: %q %v", data, err)
 	}
 }
+
+func TestByDataRemovesRebuildableDataAndTrashesTheRest(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cache := filepath.Join(home, ".npm/_cacache")
+	backups := filepath.Join(home, "Library/Application Support/MobileSync/Backup/device-1")
+	for _, dir := range []string{cache, backups} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "data"), []byte("x"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	idle := func(context.Context, scanner.Item) (scanner.Activity, error) { return scanner.Idle, nil }
+	items, err := scanner.Scan(context.Background(), scanner.Config{Workers: 1, SkipProjectScan: true, ActivityProbe: idle}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var trashed []string
+	opts := Options{Mode: ModeByData, ActivityProbe: idle, Trash: func(path string) (string, error) {
+		trashed = append(trashed, path)
+		destination := filepath.Join(home, ".Trash", filepath.Base(path))
+		if err := os.MkdirAll(filepath.Dir(destination), 0700); err != nil {
+			return "", err
+		}
+		return destination, os.Rename(path, destination)
+	}}
+	results := Execute(context.Background(), items, opts, nil)
+	status := map[string]string{}
+	for _, r := range results {
+		status[filepath.Base(r.Path)] = r.Status
+	}
+	if status["_cacache"] != "removed" || status["device-1"] != "trashed" {
+		t.Fatalf("statuses: %v (%+v)", status, results)
+	}
+	if len(trashed) != 1 || filepath.Base(trashed[0]) != "device-1" {
+		t.Fatalf("only the backup goes to the Trash: %v", trashed)
+	}
+	if ModeByData.Action(scanner.Item{Rebuildable: true}) != "remove" || ModeTrash.Action(scanner.Item{Rebuildable: true}) != "trash" {
+		t.Fatal("mode actions")
+	}
+}
