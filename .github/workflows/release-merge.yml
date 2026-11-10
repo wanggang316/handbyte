@@ -1,0 +1,61 @@
+name: release-merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Validate release and push tag
+        id: meta
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          TAG="${HEAD_REF#release/}"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo '::error::Expected branch release/vX.Y.Z'; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$SHA" ]]
+          # An annotated tag has a peeled commit; a lightweight tag has one row.
+          EXISTING=$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | tail -1 | awk '{print $1}')
+          if [[ -n "$EXISTING" && "$EXISTING" != "$SHA" ]]; then
+            echo "::error::Tag $TAG already points to another commit"
+            exit 1
+          fi
+          if [[ -z "$EXISTING" ]]; then
+            git config user.name 'handbyte release bot'
+            git config user.email 'noreply@handbyte.gumpw.com'
+            git tag -a "$TAG" -m "$TAG" "$SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  # GITHUB_TOKEN tag pushes do not start another workflow.
+  release:
+    needs: tag
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+      expected_sha: ${{ github.event.pull_request.merge_commit_sha }}
+    secrets: inherit

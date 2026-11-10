@@ -4,19 +4,83 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag (vX.Y.Z)'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      expected_sha:
+        description: 'Commit that the release tag must point to'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
+  verify:
+    runs-on: macos-14
+    timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - name: Validate tag
+        id: meta
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo '::error::Expected tag vX.Y.Z'; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.meta.outputs.tag }}
+
+      - name: Verify release commit
+        id: commit
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          if [[ -n "$EXPECTED_SHA" && "$SHA" != "$EXPECTED_SHA" ]]; then
+            echo '::error::Release tag does not point to the merged commit'
+            exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test
+        run: go test ./...
+
   build:
+    needs: verify
     name: build ${{ matrix.goarch }}
     runs-on: macos-14
+    timeout-minutes: 20
     strategy:
       matrix:
         goarch: [arm64, amd64]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
 
       - uses: actions/setup-go@v5
         with:
@@ -28,49 +92,67 @@ jobs:
           GOOS: darwin
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
+          VERSION: ${{ needs.verify.outputs.tag }}
         run: |
-          VERSION="${GITHUB_REF_NAME}"
           mkdir -p dist
           go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/handbyte .
 
       - name: Package
+        env:
+          TAG: ${{ needs.verify.outputs.tag }}
+          ARCH: ${{ matrix.goarch }}
         run: |
           cd dist
-          ARCHIVE="handbyte_${GITHUB_REF_NAME}_darwin_${{ matrix.goarch }}.tar.gz"
-          tar -czf "${ARCHIVE}" handbyte
-          shasum -a 256 "${ARCHIVE}" > "${ARCHIVE}.sha256"
-          ls -la
+          ARCHIVE="handbyte_${TAG}_darwin_${ARCH}.tar.gz"
+          tar -czf "$ARCHIVE" handbyte
+          shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.goarch }}
           path: dist/handbyte_*
+          if-no-files-found: error
 
   release:
     name: publish release
-    needs: build
+    needs: [verify, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
-      - name: Combine checksums
+      - name: Verify packages and combine checksums
+        env:
+          TAG: ${{ needs.verify.outputs.tag }}
         run: |
+          set -euo pipefail
           cd dist
-          ls -la
-          cat *.sha256 > checksums.txt
-          rm -f *.sha256
-          cat checksums.txt
+          for arch in arm64 amd64; do
+            ARCHIVE="handbyte_${TAG}_darwin_${arch}.tar.gz"
+            test -s "$ARCHIVE"
+            sha256sum -c "$ARCHIVE.sha256"
+            tar -tzf "$ARCHIVE" | grep -qx handbyte
+          done
+          cat ./*.sha256 > checksums.txt
+          rm -- ./*.sha256
 
-      - name: Create GitHub Release
+      - name: Create draft and publish verified assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.verify.outputs.tag }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "${GITHUB_REF_NAME}" \
-            --generate-notes \
-            dist/*
+          set -euo pipefail
+          if DRAFT=$(gh release view "$TAG" --json isDraft --jq .isDraft); then
+            [[ "$DRAFT" == true ]] || { echo '::error::Release is already published; refusing to replace assets'; exit 1; }
+          else
+            gh release create "$TAG" --verify-tag --draft --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" dist/* --clobber
+          # Verify the uploaded bytes before making the release public.
+          gh release download "$TAG" --dir uploaded
+          (cd uploaded && sha256sum -c checksums.txt)
+          gh release edit "$TAG" --draft=false --latest
