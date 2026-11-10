@@ -9,17 +9,17 @@ import (
 // hint is not a verdict: a cleanup scan checks the folder again before any
 // action.
 type Hints struct {
-	exact, parents map[string]Preset
-	artifacts      map[string]Preset
-	roots          []string
+	presets   []Preset
+	templates []string
+	artifacts map[string]Preset
+	roots     []string
 }
 
 // NewHints builds the lookup for a home directory and the project roots.
-// When two presets reach one path, the one with the deeper template wins.
 // A rule of the caution tier gives no hint: it holds user data, and the
 // view must not call it cleanable.
 func NewHints(home string, roots []string) Hints {
-	h := Hints{exact: map[string]Preset{}, parents: map[string]Preset{}, artifacts: map[string]Preset{}}
+	h := Hints{artifacts: map[string]Preset{}}
 	expand := func(p string) string {
 		if p == "~" {
 			return home
@@ -29,27 +29,18 @@ func NewHints(home string, roots []string) Hints {
 		}
 		return filepath.Clean(p)
 	}
-	keep := func(table map[string]Preset, path string, p Preset) {
-		if other, ok := table[path]; ok && depth(other.Path) >= depth(p.Path) {
-			return
-		}
-		table[path] = p
-	}
 	for _, p := range Presets {
 		if p.Safety == SafetyCaution {
 			continue
 		}
-		if p.ExpandChildren {
-			keep(h.parents, expand(p.Path), p)
-		} else {
-			keep(h.exact, expand(p.Path), p)
-		}
+		h.presets = append(h.presets, p)
+		h.templates = append(h.templates, expand(p.Path))
 	}
 	for _, a := range ProjectArtifactPatterns {
 		if a.Safety == SafetyCaution {
 			continue
 		}
-		h.artifacts[a.Name] = Preset{Category: a.Category, Safety: a.Safety, Description: a.Description, Source: "artifact:" + a.Name}
+		h.artifacts[a.Name] = Preset{Category: a.Category, Safety: a.Safety, Description: a.Description, Source: "artifact:" + a.Name, Area: a.Area, Rebuildable: a.Rebuildable}
 	}
 	if len(roots) == 0 {
 		roots = DefaultProjectRoots
@@ -60,23 +51,34 @@ func NewHints(home string, roots []string) Hints {
 	return h
 }
 
-func depth(template string) int { return strings.Count(template, "/") }
+func depth(template string) int { return templateDepth(template) }
 
-// Rule returns the rule that covers path.
+// Rule returns the rule that covers path. The most specific rule wins. A
+// folder that holds the location of another rule is not covered, as in a
+// cleanup scan.
 func (h Hints) Rule(path string) (Preset, bool) {
 	path = filepath.Clean(path)
-	exact, isExact := h.exact[path]
-	expanded, isChild := h.parents[filepath.Dir(path)]
-	switch {
-	case isExact && isChild:
-		if depth(expanded.Path) > depth(exact.Path) {
-			return expanded, true
+	best, found := Preset{}, false
+	bestDepth := -1
+	for i, p := range h.presets {
+		template := h.templates[i]
+		d := depth(p.Path)
+		target := path
+		if p.ExpandChildren {
+			target = filepath.Dir(path)
+			d++
 		}
-		return exact, true
-	case isExact:
-		return exact, true
-	case isChild:
-		return expanded, true
+		if matchTemplate(template, target) && d > bestDepth {
+			best, found, bestDepth = p, true, d
+		}
+	}
+	if found {
+		for _, template := range h.templates {
+			if templateBelow(template, path) {
+				return Preset{}, false
+			}
+		}
+		return best, true
 	}
 	if a, ok := h.artifacts[filepath.Base(path)]; ok {
 		for _, root := range h.roots {
@@ -86,4 +88,15 @@ func (h Hints) Rule(path string) (Preset, bool) {
 		}
 	}
 	return Preset{}, false
+}
+
+// templateBelow reports whether a template names a location strictly
+// inside path.
+func templateBelow(template, path string) bool {
+	t := strings.Split(filepath.Clean(template), string(filepath.Separator))
+	p := strings.Split(path, string(filepath.Separator))
+	if len(t) <= len(p) {
+		return false
+	}
+	return matchTemplate(strings.Join(t[:len(p)], string(filepath.Separator)), path)
 }

@@ -59,7 +59,13 @@ type Item struct {
 	Safety      Safety
 	Description string // why it's listed and what cleaning means
 	// Source records which preset/pattern produced this item, for grouping.
-	Source     string
+	Source string
+	// Area groups the item on the first screen of a cleanup.
+	Area string
+	// Rebuildable data is made again by its owner, so it is removed
+	// directly; other data goes to the Trash.
+	Rebuildable bool
+
 	ScanStatus string
 	ScanError  string
 }

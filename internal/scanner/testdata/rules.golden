@@ -1,55 +1,105 @@
-preset	xcode-derived	~/Library/Developer/Xcode/DerivedData	true	Xcode & iOS	safe
-preset	xcode-devicesupport	~/Library/Developer/Xcode/iOS DeviceSupport	true	Xcode & iOS	safe
-preset	xcode-devicesupport	~/Library/Developer/Xcode/watchOS DeviceSupport	true	Xcode & iOS	safe
-preset	xcode-devicesupport	~/Library/Developer/Xcode/tvOS DeviceSupport	true	Xcode & iOS	safe
-preset	xcode-archives	~/Library/Developer/Xcode/Archives	false	Xcode & iOS	caution
-preset	coresim-cache	~/Library/Developer/CoreSimulator/Caches	false	Xcode & iOS	safe
-preset	go-build	~/Library/Caches/go-build	false	Developer Caches	safe
-preset	go-mod-cache	~/go/pkg/mod/cache/download	false	Developer Caches	safe
-preset	cargo-registry	~/.cargo/registry	false	Developer Caches	safe
-preset	cargo-git	~/.cargo/git	false	Developer Caches	safe
-preset	rustup	~/.rustup/toolchains	true	Developer Caches	review
-preset	npm-cache	~/.npm/_cacache	false	Developer Caches	safe
-preset	pnpm-store	~/Library/pnpm/store	false	Developer Caches	review
-preset	yarn-cache	~/.yarn/berry/cache	false	Developer Caches	safe
-preset	yarn-cache	~/Library/Caches/Yarn	false	Developer Caches	safe
-preset	gradle-cache	~/.gradle/caches	false	Developer Caches	safe
-preset	maven-cache	~/.m2/repository	false	Developer Caches	review
-preset	swiftpm-cache	~/Library/Caches/org.swift.swiftpm	false	Developer Caches	safe
-preset	playwright	~/Library/Caches/ms-playwright	false	Developer Caches	safe
-preset	cypress	~/Library/Caches/Cypress	false	Developer Caches	safe
-preset	brew-cache	~/Library/Caches/Homebrew	false	Developer Caches	safe
-preset	jetbrains	~/Library/Caches/JetBrains	false	Developer Caches	safe
-preset	codex	~/Library/Caches/com.openai.codex	false	Developer Caches	safe
-preset	xdg-cache	~/.cache	true	Developer Caches	review
-preset	library-caches	~/Library/Caches	true	System & App Caches	safe
-preset	library-logs	~/Library/Logs	true	Trash & Logs	safe
-preset	containers	~/Library/Containers	true	System & App Caches	caution
-preset	orbstack	~/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data	false	VMs & Containers	caution
-preset	apple-container	~/Library/Application Support/com.apple.container	false	VMs & Containers	caution
-preset	claude-vm	~/Library/Application Support/Claude/vm_bundles	false	VMs & Containers	caution
-preset	docker	~/.docker	false	VMs & Containers	caution
-preset	trash	~/.Trash	false	Trash & Logs	review
-preset	downloads	~/Downloads	false	Other Large Directories	caution
-artifact	node_modules	Project Build Artifacts	review
-artifact	target	Project Build Artifacts	review
-artifact	build	Project Build Artifacts	review
-artifact	.build	Project Build Artifacts	review
-artifact	dist	Project Build Artifacts	review
-artifact	.next	Project Build Artifacts	review
-artifact	.nuxt	Project Build Artifacts	review
-artifact	.turbo	Project Build Artifacts	review
-artifact	.parcel-cache	Project Build Artifacts	review
-artifact	.gradle	Project Build Artifacts	review
-artifact	.dart_tool	Project Build Artifacts	review
-artifact	DerivedData	Project Build Artifacts	review
-artifact	Pods	Project Build Artifacts	review
-artifact	__pycache__	Project Build Artifacts	safe
-artifact	.pytest_cache	Project Build Artifacts	safe
-artifact	.mypy_cache	Project Build Artifacts	safe
-artifact	.ruff_cache	Project Build Artifacts	safe
-artifact	.venv	Project Build Artifacts	review
-artifact	venv	Project Build Artifacts	review
+preset	xcode-derived	~/Library/Developer/Xcode/DerivedData	true	Xcode & iOS	safe	xcode	rebuildable=true	Xcode,xcodebuild,swift,swiftc,SourceKitService,Simulator,CoreSimulatorService
+preset	xcode-devicesupport	~/Library/Developer/Xcode/iOS DeviceSupport	true	Xcode & iOS	safe	xcode	rebuildable=true	Xcode,xcodebuild,swift,swiftc,SourceKitService,Simulator,CoreSimulatorService
+preset	xcode-devicesupport	~/Library/Developer/Xcode/watchOS DeviceSupport	true	Xcode & iOS	safe	xcode	rebuildable=true	Xcode,xcodebuild,swift,swiftc,SourceKitService,Simulator,CoreSimulatorService
+preset	xcode-devicesupport	~/Library/Developer/Xcode/tvOS DeviceSupport	true	Xcode & iOS	safe	xcode	rebuildable=true	Xcode,xcodebuild,swift,swiftc,SourceKitService,Simulator,CoreSimulatorService
+preset	xcode-archives	~/Library/Developer/Xcode/Archives	false	Xcode & iOS	caution	xcode	rebuildable=false	
+preset	coresim-cache	~/Library/Developer/CoreSimulator/Caches	false	Xcode & iOS	safe	xcode	rebuildable=true	Xcode,xcodebuild,swift,swiftc,SourceKitService,Simulator,CoreSimulatorService
+preset	go-build	~/Library/Caches/go-build	false	Developer Caches	safe	packages	rebuildable=true	go,gopls
+preset	go-mod-cache	~/go/pkg/mod/cache/download	false	Developer Caches	safe	packages	rebuildable=true	go,gopls
+preset	cargo-registry	~/.cargo/registry	false	Developer Caches	safe	packages	rebuildable=true	cargo,rustc,rust-analyzer
+preset	cargo-git	~/.cargo/git	false	Developer Caches	safe	packages	rebuildable=true	cargo,rustc,rust-analyzer
+preset	rustup	~/.rustup/toolchains	true	Developer Caches	review	packages	rebuildable=true	
+preset	npm-cache	~/.npm/_cacache	false	Developer Caches	safe	packages	rebuildable=true	node,npm,pnpm,yarn,bun
+preset	pnpm-store	~/Library/pnpm/store	false	Developer Caches	review	packages	rebuildable=true	
+preset	yarn-cache	~/.yarn/berry/cache	false	Developer Caches	safe	packages	rebuildable=true	node,npm,pnpm,yarn,bun
+preset	yarn-cache	~/Library/Caches/Yarn	false	Developer Caches	safe	packages	rebuildable=true	node,npm,pnpm,yarn,bun
+preset	gradle-cache	~/.gradle/caches	false	Developer Caches	safe	packages	rebuildable=true	java,gradle
+preset	maven-cache	~/.m2/repository	false	Developer Caches	review	packages	rebuildable=true	
+preset	swiftpm-cache	~/Library/Caches/org.swift.swiftpm	false	Developer Caches	safe	packages	rebuildable=true	Xcode,xcodebuild,swift,swiftc,SourceKitService
+preset	playwright	~/Library/Caches/ms-playwright	false	Developer Caches	safe	packages	rebuildable=true	node,npm,pnpm,yarn,bun,chrome,Chromium
+preset	cypress	~/Library/Caches/Cypress	false	Developer Caches	safe	packages	rebuildable=true	node,npm,Cypress
+preset	brew-cache	~/Library/Caches/Homebrew	false	Developer Caches	safe	packages	rebuildable=true	brew,ruby
+preset	jetbrains	~/Library/Caches/JetBrains	false	Developer Caches	safe	packages	rebuildable=true	idea,pycharm,goland,clion,rider,webstorm,java
+preset	codex	~/Library/Caches/com.openai.codex	false	Developer Caches	safe	packages	rebuildable=true	codex,Codex
+preset	xdg-cache	~/.cache	true	Developer Caches	review	packages	rebuildable=true	
+preset	chrome-cache	~/Library/Caches/Google/Chrome	false	System & App Caches	safe	browsers	rebuildable=true	Google Chrome,Google Chrome Helper
+preset	chrome-profile-cache	~/Library/Application Support/Google/Chrome/*/Code Cache	false	System & App Caches	safe	browsers	rebuildable=true	Google Chrome,Google Chrome Helper
+preset	chrome-profile-cache	~/Library/Application Support/Google/Chrome/*/GPUCache	false	System & App Caches	safe	browsers	rebuildable=true	Google Chrome,Google Chrome Helper
+preset	chrome-profile-cache	~/Library/Application Support/Google/Chrome/*/Service Worker/CacheStorage	false	System & App Caches	safe	browsers	rebuildable=true	Google Chrome,Google Chrome Helper
+preset	edge-cache	~/Library/Caches/Microsoft Edge	false	System & App Caches	safe	browsers	rebuildable=true	Microsoft Edge,Microsoft Edge Helper
+preset	edge-profile-cache	~/Library/Application Support/Microsoft Edge/*/Code Cache	false	System & App Caches	safe	browsers	rebuildable=true	Microsoft Edge,Microsoft Edge Helper
+preset	edge-profile-cache	~/Library/Application Support/Microsoft Edge/*/GPUCache	false	System & App Caches	safe	browsers	rebuildable=true	Microsoft Edge,Microsoft Edge Helper
+preset	edge-profile-cache	~/Library/Application Support/Microsoft Edge/*/Service Worker/CacheStorage	false	System & App Caches	safe	browsers	rebuildable=true	Microsoft Edge,Microsoft Edge Helper
+preset	brave-cache	~/Library/Caches/BraveSoftware/Brave-Browser	false	System & App Caches	safe	browsers	rebuildable=true	Brave Browser,Brave Browser Helper
+preset	brave-profile-cache	~/Library/Application Support/BraveSoftware/Brave-Browser/*/Code Cache	false	System & App Caches	safe	browsers	rebuildable=true	Brave Browser,Brave Browser Helper
+preset	brave-profile-cache	~/Library/Application Support/BraveSoftware/Brave-Browser/*/GPUCache	false	System & App Caches	safe	browsers	rebuildable=true	Brave Browser,Brave Browser Helper
+preset	brave-profile-cache	~/Library/Application Support/BraveSoftware/Brave-Browser/*/Service Worker/CacheStorage	false	System & App Caches	safe	browsers	rebuildable=true	Brave Browser,Brave Browser Helper
+preset	arc-cache	~/Library/Caches/Arc	false	System & App Caches	safe	browsers	rebuildable=true	Arc,Arc Helper
+preset	arc-profile-cache	~/Library/Application Support/Arc/User Data/*/Code Cache	false	System & App Caches	safe	browsers	rebuildable=true	Arc,Arc Helper
+preset	arc-profile-cache	~/Library/Application Support/Arc/User Data/*/GPUCache	false	System & App Caches	safe	browsers	rebuildable=true	Arc,Arc Helper
+preset	firefox-cache	~/Library/Caches/Firefox/Profiles/*/cache2	false	System & App Caches	safe	browsers	rebuildable=true	firefox
+preset	safari-cache	~/Library/Caches/com.apple.Safari	false	System & App Caches	safe	browsers	rebuildable=true	Safari,com.apple.WebKit.Networking
+preset	pip-cache	~/Library/Caches/pip	false	Developer Caches	safe	packages	rebuildable=true	pip,pip3,python,python3
+preset	poetry-cache	~/Library/Caches/pypoetry	false	Developer Caches	safe	packages	rebuildable=true	poetry,python,python3
+preset	cocoapods-cache	~/Library/Caches/CocoaPods	false	Developer Caches	safe	packages	rebuildable=true	pod,ruby
+preset	bun-cache	~/.bun/install/cache	false	Developer Caches	safe	packages	rebuildable=true	bun
+preset	node-gyp-cache	~/Library/Caches/node-gyp	false	Developer Caches	safe	packages	rebuildable=true	node,npm,node-gyp
+preset	deno-cache	~/Library/Caches/deno	false	Developer Caches	safe	packages	rebuildable=true	deno
+preset	composer-cache	~/Library/Caches/composer	false	Developer Caches	safe	packages	rebuildable=true	composer,php
+preset	terraform-plugins	~/.terraform.d/plugin-cache	false	Developer Caches	safe	packages	rebuildable=true	terraform
+preset	pub-cache	~/.pub-cache	false	Developer Caches	review	packages	rebuildable=true	dart,flutter
+preset	vscode-cache	~/Library/Application Support/Code/Cache	false	Developer Caches	safe	packages	rebuildable=true	Code,Code Helper,Electron
+preset	vscode-cache	~/Library/Application Support/Code/CachedData	false	Developer Caches	safe	packages	rebuildable=true	Code,Code Helper,Electron
+preset	vscode-cache	~/Library/Application Support/Code/Code Cache	false	Developer Caches	safe	packages	rebuildable=true	Code,Code Helper,Electron
+preset	vscode-cache	~/Library/Application Support/Code/GPUCache	false	Developer Caches	safe	packages	rebuildable=true	Code,Code Helper,Electron
+preset	xcode-doc-cache	~/Library/Developer/Xcode/DocumentationCache	false	Xcode & iOS	safe	xcode	rebuildable=true	Xcode
+preset	xcode-device-logs	~/Library/Developer/Xcode/iOS Device Logs	false	Xcode & iOS	safe	logs	rebuildable=true	Xcode
+preset	crash-reports	~/Library/Logs/DiagnosticReports	false	Trash & Logs	safe	logs	rebuildable=true	ReportCrash
+preset	device-firmware	~/Library/iTunes/iPhone Software Updates	false	Other Large Directories	safe	files	rebuildable=true	Music,AMPDevicesAgent
+preset	device-firmware	~/Library/iTunes/iPad Software Updates	false	Other Large Directories	safe	files	rebuildable=true	Music,AMPDevicesAgent
+preset	ios-backups	~/Library/Application Support/MobileSync/Backup	true	Other Large Directories	review	files	rebuildable=false	AMPDevicesAgent,MobileDeviceUpdater
+preset	mail-downloads	~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads	false	Other Large Directories	review	files	rebuildable=false	Mail
+preset	spotify-cache	~/Library/Caches/com.spotify.client	false	System & App Caches	safe	apps	rebuildable=true	Spotify,Spotify Helper
+preset	slack-cache	~/Library/Application Support/Slack/Cache	false	System & App Caches	safe	apps	rebuildable=true	Slack,Slack Helper
+preset	slack-cache	~/Library/Application Support/Slack/Code Cache	false	System & App Caches	safe	apps	rebuildable=true	Slack,Slack Helper
+preset	slack-cache	~/Library/Application Support/Slack/GPUCache	false	System & App Caches	safe	apps	rebuildable=true	Slack,Slack Helper
+preset	slack-cache	~/Library/Application Support/Slack/Service Worker/CacheStorage	false	System & App Caches	safe	apps	rebuildable=true	Slack,Slack Helper
+preset	discord-cache	~/Library/Application Support/discord/Cache	false	System & App Caches	safe	apps	rebuildable=true	Discord,Discord Helper
+preset	discord-cache	~/Library/Application Support/discord/Code Cache	false	System & App Caches	safe	apps	rebuildable=true	Discord,Discord Helper
+preset	discord-cache	~/Library/Application Support/discord/GPUCache	false	System & App Caches	safe	apps	rebuildable=true	Discord,Discord Helper
+preset	discord-cache	~/Library/Application Support/discord/Service Worker/CacheStorage	false	System & App Caches	safe	apps	rebuildable=true	Discord,Discord Helper
+preset	notion-cache	~/Library/Application Support/Notion/Cache	false	System & App Caches	safe	apps	rebuildable=true	Notion,Notion Helper
+preset	notion-cache	~/Library/Application Support/Notion/Code Cache	false	System & App Caches	safe	apps	rebuildable=true	Notion,Notion Helper
+preset	notion-cache	~/Library/Application Support/Notion/GPUCache	false	System & App Caches	safe	apps	rebuildable=true	Notion,Notion Helper
+preset	notion-cache	~/Library/Application Support/Notion/Service Worker/CacheStorage	false	System & App Caches	safe	apps	rebuildable=true	Notion,Notion Helper
+preset	library-caches	~/Library/Caches	true	System & App Caches	safe	apps	rebuildable=true	
+preset	library-logs	~/Library/Logs	true	Trash & Logs	safe	logs	rebuildable=true	
+preset	containers	~/Library/Containers	true	System & App Caches	caution	apps	rebuildable=false	
+preset	orbstack	~/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data	false	VMs & Containers	caution	vms	rebuildable=false	
+preset	apple-container	~/Library/Application Support/com.apple.container	false	VMs & Containers	caution	vms	rebuildable=false	
+preset	claude-vm	~/Library/Application Support/Claude/vm_bundles	false	VMs & Containers	caution	vms	rebuildable=false	
+preset	docker	~/.docker	false	VMs & Containers	caution	vms	rebuildable=false	
+preset	trash	~/.Trash	false	Trash & Logs	review	files	rebuildable=false	
+preset	downloads	~/Downloads	false	Other Large Directories	caution	files	rebuildable=false	
+artifact	node_modules	Project Build Artifacts	review	projects	rebuildable=true
+artifact	target	Project Build Artifacts	review	projects	rebuildable=true
+artifact	build	Project Build Artifacts	review	projects	rebuildable=true
+artifact	.build	Project Build Artifacts	review	projects	rebuildable=true
+artifact	dist	Project Build Artifacts	review	projects	rebuildable=true
+artifact	.next	Project Build Artifacts	review	projects	rebuildable=true
+artifact	.nuxt	Project Build Artifacts	review	projects	rebuildable=true
+artifact	.turbo	Project Build Artifacts	review	projects	rebuildable=true
+artifact	.parcel-cache	Project Build Artifacts	review	projects	rebuildable=true
+artifact	.gradle	Project Build Artifacts	review	projects	rebuildable=true
+artifact	.dart_tool	Project Build Artifacts	review	projects	rebuildable=true
+artifact	DerivedData	Project Build Artifacts	review	projects	rebuildable=true
+artifact	Pods	Project Build Artifacts	review	projects	rebuildable=true
+artifact	__pycache__	Project Build Artifacts	safe	projects	rebuildable=true
+artifact	.pytest_cache	Project Build Artifacts	safe	projects	rebuildable=true
+artifact	.mypy_cache	Project Build Artifacts	safe	projects	rebuildable=true
+artifact	.ruff_cache	Project Build Artifacts	safe	projects	rebuildable=true
+artifact	.venv	Project Build Artifacts	review	projects	rebuildable=true
+artifact	venv	Project Build Artifacts	review	projects	rebuildable=true
 root	~/dev
 root	~/Projects
 root	~/Code

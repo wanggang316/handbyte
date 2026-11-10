@@ -16,8 +16,8 @@ func TestEmbeddedCatalogIsValid(t *testing.T) {
 }
 
 func TestParseRejectsDefectiveRules(t *testing.T) {
-	const head = `{"version":1,"categories":[{"id":"c","title":"C"}],"projectRoots":["~/dev"],"rules":[`
-	ok := `{"id":"a","kind":"preset","path":"~/Library/Caches/a","category":"c","safety":"safe","summary":"s","recovery":"r"}`
+	const head = `{"version":2,"areas":[{"id":"x","title":"X"}],"categories":[{"id":"c","title":"C"}],"projectRoots":["~/dev"],"rules":[`
+	ok := `{"id":"a","kind":"preset","path":"~/Library/Caches/a","category":"c","safety":"safe","summary":"s","recovery":"r","area":"x","rebuildable":true}`
 	if _, err := Parse([]byte(head + ok + "]}")); err != nil {
 		t.Fatalf("valid catalog rejected: %v", err)
 	}
@@ -30,8 +30,10 @@ func TestParseRejectsDefectiveRules(t *testing.T) {
 		"missing recovery":    strings.Replace(ok, `"recovery":"r"`, `"recovery":""`, 1),
 		"unknown field":       strings.Replace(ok, `"id":"a"`, `"id":"a","glob":"*"`, 1),
 		"repeated location":   ok + "," + ok,
-		"artifact id differs": `{"id":"artifact:x","kind":"artifact","name":"y","category":"c","safety":"review","summary":"s","recovery":"r"}`,
-		"artifact with slash": `{"id":"artifact:a/b","kind":"artifact","name":"a/b","category":"c","safety":"review","summary":"s","recovery":"r"}`,
+		"unknown area":        strings.Replace(ok, `"area":"x"`, `"area":"y"`, 1),
+		"partial wildcard":    strings.Replace(ok, "~/Library/Caches/a", "~/Library/Caches/a*", 1),
+		"artifact id differs": `{"id":"artifact:x","kind":"artifact","name":"y","category":"c","safety":"review","summary":"s","recovery":"r","area":"x"}`,
+		"artifact with slash": `{"id":"artifact:a/b","kind":"artifact","name":"a/b","category":"c","safety":"review","summary":"s","recovery":"r","area":"x"}`,
 	}
 	for name, rule := range cases {
 		if _, err := Parse([]byte(head + rule + "]}")); err == nil {

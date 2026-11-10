@@ -21,6 +21,10 @@ func TestCoveringRule(t *testing.T) {
 		"Documents":                                   "",
 		"Downloads":                                   "",
 		"Library/Developer/Xcode/Archives":            "",
+		"Library/Caches/Google":                       "",
+		"Library/Caches/Google/Chrome":                "chrome-cache",
+		"Library/Application Support/Google/Chrome/Profile 2/Code Cache": "chrome-profile-cache",
+		"Library/Application Support/Google/Chrome/Profile 2/Cookies":    "",
 	}
 	for rel, want := range cases {
 		got := ""

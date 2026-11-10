@@ -17,6 +17,9 @@ type Options struct {
 	Mode          Mode
 	Exclusions    []string
 	ActivityProbe scanner.ActivityProbe
+	// Trash moves a path to the Trash and returns the destination. Tests
+	// replace it; the default is the Finder.
+	Trash func(path string) (string, error)
 }
 
 // Execute applies only revalidated, non-overlapping candidates. Cancellation
@@ -26,6 +29,9 @@ func Execute(ctx context.Context, items []scanner.Item, opts Options, progress c
 		defer close(progress)
 	}
 	items = uniqueItems(items)
+	if opts.Trash == nil {
+		opts.Trash = moveToTrash
+	}
 	results := make([]Result, 0, len(items))
 	journalFailure := ""
 	for _, it := range items {
@@ -64,7 +70,7 @@ func Execute(ctx context.Context, items []scanner.Item, opts Options, progress c
 				r.Previewed = it.Size
 				break
 			}
-			if opts.Mode != ModeTrash && opts.Mode != ModeRemove {
+			if opts.Mode != ModeTrash && opts.Mode != ModeRemove && opts.Mode != ModeByData {
 				r.Status = "failed"
 				r.Err = fmt.Errorf("invalid cleanup mode")
 				break
@@ -82,8 +88,8 @@ func Execute(ctx context.Context, items []scanner.Item, opts Options, progress c
 				r.Err = err
 			} else {
 				before, beforeErr := freeBytes(it.Path)
-				if opts.Mode == ModeTrash {
-					r.Destination, r.Err = moveToTrash(it.Path)
+				if opts.Mode.Action(it) == "trash" {
+					r.Destination, r.Err = opts.Trash(it.Path)
 					if r.Err == nil {
 						r.Status = "trashed"
 						r.Moved = it.Size

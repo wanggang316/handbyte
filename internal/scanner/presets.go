@@ -14,6 +14,11 @@ type Preset struct {
 	Safety         Safety
 	Description    string
 	Source         string
+	Area           string
+	// Rebuildable data is made again by its owner; see catalog.Rule.
+	Rebuildable bool
+	// Processes are executable names of the owner.
+	Processes []string
 }
 
 // ProjectArtifact is a directory name commonly produced by build systems.
@@ -24,6 +29,8 @@ type ProjectArtifact struct {
 	Category    Category
 	Safety      Safety
 	Description string
+	Area        string
+	Rebuildable bool
 }
 
 // The rule set comes from the shared catalog (catalog/cleanup.json), in
@@ -59,6 +66,9 @@ func init() {
 				Safety:         safety[r.Safety],
 				Description:    description,
 				Source:         r.ID,
+				Area:           r.Area,
+				Rebuildable:    r.Rebuildable,
+				Processes:      r.Processes,
 			})
 		case catalog.KindArtifact:
 			ProjectArtifactPatterns = append(ProjectArtifactPatterns, ProjectArtifact{
@@ -66,6 +76,8 @@ func init() {
 				Category:    category,
 				Safety:      safety[r.Safety],
 				Description: description,
+				Area:        r.Area,
+				Rebuildable: r.Rebuildable,
 			})
 		}
 	}

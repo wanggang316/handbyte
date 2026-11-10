@@ -70,6 +70,10 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		source                string
 		project, scope, owner string
 		name                  string
+		area                  string
+		rebuildable           bool
+		// preset is the depth of the preset template, or 0 for other tasks.
+		preset int
 	}
 	var tasks []task
 	var unavailable []Item
@@ -82,44 +86,50 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 
 	if cfg.Scope != "projects" {
 		for _, p := range Presets {
-			expanded, ok := expandHome(p.Path)
+			template, ok := expandHome(p.Path)
 			if !ok {
 				continue
 			}
-			info, err := os.Lstat(expanded)
+			locations, err := expandTemplate(template)
 			if err != nil {
-				report(expanded, p.Category, err)
+				report(template, p.Category, err)
 				continue
 			}
-			if !info.IsDir() {
-				continue
-			}
-			if p.ExpandChildren {
+			for _, expanded := range locations {
+				info, err := os.Lstat(expanded)
+				if err != nil {
+					report(expanded, p.Category, err)
+					continue
+				}
+				if !info.IsDir() {
+					continue
+				}
+				add := func(path string, depth int) {
+					tasks = append(tasks, task{
+						path:        path,
+						category:    p.Category,
+						safety:      p.Safety,
+						description: p.Description,
+						source:      p.Source,
+						area:        p.Area,
+						rebuildable: p.Rebuildable,
+						preset:      depth,
+					})
+				}
+				if !p.ExpandChildren {
+					add(expanded, templateDepth(p.Path))
+					continue
+				}
 				entries, err := os.ReadDir(expanded)
 				if err != nil {
 					report(expanded, p.Category, err)
 					continue
 				}
 				for _, e := range entries {
-					if !e.IsDir() {
-						continue
+					if e.IsDir() {
+						add(filepath.Join(expanded, e.Name()), templateDepth(p.Path)+1)
 					}
-					tasks = append(tasks, task{
-						path:        filepath.Join(expanded, e.Name()),
-						category:    p.Category,
-						safety:      p.Safety,
-						description: p.Description,
-						source:      p.Source,
-					})
 				}
-			} else {
-				tasks = append(tasks, task{
-					path:        expanded,
-					category:    p.Category,
-					safety:      p.Safety,
-					description: p.Description,
-					source:      p.Source,
-				})
 			}
 		}
 
@@ -130,7 +140,7 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 			}
 		} else {
 			for _, it := range simulatorItems {
-				tasks = append(tasks, task{path: it.Path, category: it.Category, safety: it.Safety, description: it.Description, source: it.Source, owner: it.Owner, name: it.Name})
+				tasks = append(tasks, task{path: it.Path, category: it.Category, safety: it.Safety, description: it.Description, source: it.Source, owner: it.Owner, name: it.Name, area: "xcode"})
 			}
 		}
 
@@ -154,6 +164,8 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 				safety:      pat.Safety,
 				description: pat.Description,
 				source:      "artifact:" + pat.Name,
+				area:        pat.Area,
+				rebuildable: pat.Rebuildable,
 			})
 		}
 	}
@@ -172,7 +184,7 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 		seen[t.path] = true
 		unique = append(unique, t)
 	}
-	tasks = unique
+	tasks = withoutOuterPresets(unique, func(t task) (string, int) { return t.path, t.preset })
 
 	if cfg.ActivityProbe == nil {
 		cfg.ActivityProbe = processProbe(ctx)
@@ -239,6 +251,7 @@ func Scan(ctx context.Context, cfg Config, progress chan<- Progress) ([]Item, er
 					status = "cancelled"
 				}
 				it := Item{
+					Area: t.area, Rebuildable: t.rebuildable,
 					IsDir: true, Identity: id, Project: t.project, Scope: t.scope, Owner: t.owner, Name: t.name,
 					ScanStatus: status, ScanError: reason,
 					Path:        t.path,
@@ -425,4 +438,29 @@ func expandHome(path string) (string, bool) {
 		return filepath.Join(home, path[2:]), true
 	}
 	return path, true
+}
+
+// withoutOuterPresets drops a preset location that holds the location of
+// another preset. The inner rule names its owner and its cost exactly; the
+// outer location, often a child of ~/Library/Caches, would also take the
+// inner data with a weaker check. The rest of the outer location stays.
+func withoutOuterPresets[T any](tasks []T, key func(T) (string, int)) []T {
+	out := tasks[:0:0]
+	for _, t := range tasks {
+		path, depth := key(t)
+		outer := false
+		if depth > 0 {
+			for _, other := range tasks {
+				otherPath, otherDepth := key(other)
+				if otherDepth > 0 && otherPath != path && Contains(path, otherPath) {
+					outer = true
+					break
+				}
+			}
+		}
+		if !outer {
+			out = append(out, t)
+		}
+	}
+	return out
 }

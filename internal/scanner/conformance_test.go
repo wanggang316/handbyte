@@ -25,6 +25,7 @@ type conformanceCase struct {
 		Rule     string `json:"rule"`
 		Category string `json:"category"`
 		Safety   string `json:"safety"`
+		Area     string `json:"area"`
 	} `json:"expect"`
 }
 
@@ -76,10 +77,10 @@ func TestCleanupConformance(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				got = append(got, fmt.Sprintf("%s\t%s\t%s\t%s", rel, it.Source, it.Category, it.Safety))
+				got = append(got, fmt.Sprintf("%s\t%s\t%s\t%s\t%s", rel, it.Source, it.Category, it.Safety, it.Area))
 			}
 			for _, e := range c.Expect {
-				want = append(want, fmt.Sprintf("%s\t%s\t%s\t%s", e.Path, e.Rule, titles.CategoryTitle(e.Category), e.Safety))
+				want = append(want, fmt.Sprintf("%s\t%s\t%s\t%s\t%s", e.Path, e.Rule, titles.CategoryTitle(e.Category), e.Safety, e.Area))
 			}
 			sort.Strings(got)
 			sort.Strings(want)

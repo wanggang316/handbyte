@@ -1,0 +1,86 @@
+{
+  "name": "a wildcard reaches each profile, and a location that holds a more specific rule is not reported",
+  "projectRoots": [],
+  "files": [
+    {
+      "path": "Library/Caches/Google/Chrome/Default/Cache/data_1",
+      "bytes": 8192
+    },
+    {
+      "path": "Library/Caches/Google/Other/data",
+      "bytes": 4096
+    },
+    {
+      "path": "Library/Application Support/Google/Chrome/Default/Code Cache/js/a",
+      "bytes": 8192
+    },
+    {
+      "path": "Library/Application Support/Google/Chrome/Profile 1/GPUCache/b",
+      "bytes": 4096
+    },
+    {
+      "path": "Library/Application Support/Google/Chrome/Default/Cookies",
+      "bytes": 4096
+    },
+    {
+      "path": "Library/Application Support/Google/Chrome/.hidden/Code Cache/c",
+      "bytes": 4096
+    },
+    {
+      "path": "Library/Caches/com.example.app/Cache.db",
+      "bytes": 4096
+    },
+    {
+      "path": "Library/Logs/DiagnosticReports/App.ips",
+      "bytes": 4096
+    },
+    {
+      "path": "Library/Logs/Example/app.log",
+      "bytes": 4096
+    }
+  ],
+  "expect": [
+    {
+      "path": "Library/Caches/Google/Chrome",
+      "rule": "chrome-cache",
+      "category": "system-cache",
+      "safety": "safe",
+      "area": "browsers"
+    },
+    {
+      "path": "Library/Application Support/Google/Chrome/Default/Code Cache",
+      "rule": "chrome-profile-cache",
+      "category": "system-cache",
+      "safety": "safe",
+      "area": "browsers"
+    },
+    {
+      "path": "Library/Application Support/Google/Chrome/Profile 1/GPUCache",
+      "rule": "chrome-profile-cache",
+      "category": "system-cache",
+      "safety": "safe",
+      "area": "browsers"
+    },
+    {
+      "path": "Library/Caches/com.example.app",
+      "rule": "library-caches",
+      "category": "system-cache",
+      "safety": "safe",
+      "area": "apps"
+    },
+    {
+      "path": "Library/Logs/DiagnosticReports",
+      "rule": "crash-reports",
+      "category": "trash",
+      "safety": "safe",
+      "area": "logs"
+    },
+    {
+      "path": "Library/Logs/Example",
+      "rule": "library-logs",
+      "category": "trash",
+      "safety": "safe",
+      "area": "logs"
+    }
+  ]
+}

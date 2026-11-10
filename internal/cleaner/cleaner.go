@@ -15,7 +15,18 @@ const (
 	ModeRemove
 	// ModeDryRun reports what would happen but changes nothing.
 	ModeDryRun
+	// ModeByData removes rebuildable data directly, because its owner makes
+	// it again, and moves all other data to the Trash.
+	ModeByData
 )
+
+// Action returns what a mode does with one item: "remove" or "trash".
+func (m Mode) Action(it scanner.Item) string {
+	if m == ModeRemove || (m == ModeByData && it.Rebuildable) {
+		return "remove"
+	}
+	return "trash"
+}
 
 // Result is the outcome of cleaning one path.
 type Result struct {

@@ -24,7 +24,9 @@ const (
 
 // Cleanup is the content of cleanup.json.
 type Cleanup struct {
-	Version      int        `json:"version"`
+	Version int `json:"version"`
+	// Areas group the rules on the first screen of a cleanup, in order.
+	Areas        []Area     `json:"areas"`
 	Categories   []Category `json:"categories"`
 	ProjectRoots []string   `json:"projectRoots"`
 	Rules        []Rule     `json:"rules"`
@@ -35,10 +37,17 @@ type Category struct {
 	Title string `json:"title"`
 }
 
+// Area is a group of rules that the result of a cleanup shows as one line.
+type Area struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
 // Rule is one cleanup rule. A preset names a location below the home
-// directory. An artifact names a directory that build tools make below the
-// project roots. Several presets can share one ID when they are the same
-// rule at different locations.
+// directory; a path segment "*" stands for each directory at that place,
+// for example each browser profile. An artifact names a directory that
+// build tools make below the project roots. Several presets can share one
+// ID when they are the same rule at different locations.
 type Rule struct {
 	ID             string   `json:"id"`
 	Kind           string   `json:"kind"`
@@ -50,6 +59,14 @@ type Rule struct {
 	Owners         []string `json:"owners,omitempty"`
 	Summary        string   `json:"summary"`
 	Recovery       string   `json:"recovery"`
+	Area           string   `json:"area"`
+	// Rebuildable data is made again by its owner, so it is removed
+	// directly. Other data goes to the Trash.
+	Rebuildable bool `json:"rebuildable"`
+	// Processes are executable names of the owner. While one runs, the
+	// CLI does not clean the rule's items. No processes: the CLI cannot
+	// check the owner and only shows the items.
+	Processes []string `json:"processes,omitempty"`
 }
 
 // Load returns the embedded cleanup catalog. It panics on a defective
@@ -70,8 +87,15 @@ func Parse(data []byte) (Cleanup, error) {
 	if err := dec.Decode(&c); err != nil {
 		return Cleanup{}, err
 	}
-	if c.Version != 1 {
+	if c.Version != 2 {
 		return Cleanup{}, fmt.Errorf("unsupported version %d", c.Version)
+	}
+	areas := map[string]bool{}
+	for _, a := range c.Areas {
+		if a.ID == "" || a.Title == "" || areas[a.ID] {
+			return Cleanup{}, fmt.Errorf("area %q is empty or repeated", a.ID)
+		}
+		areas[a.ID] = true
 	}
 	categories := map[string]bool{}
 	for _, cat := range c.Categories {
@@ -99,6 +123,9 @@ func Parse(data []byte) (Cleanup, error) {
 		if r.Summary == "" || r.Recovery == "" {
 			return fail("summary and recovery are required")
 		}
+		if !areas[r.Area] {
+			return fail("unknown area " + r.Area)
+		}
 		var location string
 		switch r.Kind {
 		case KindPreset:
@@ -107,6 +134,11 @@ func Parse(data []byte) (Cleanup, error) {
 			}
 			if !strings.HasPrefix(r.Path, "~/") || strings.Contains(r.Path, "..") || strings.HasSuffix(r.Path, "/") {
 				return fail("path must start with ~/ and contain no .. or trailing slash")
+			}
+			for _, segment := range strings.Split(r.Path, "/") {
+				if strings.Contains(segment, "*") && segment != "*" {
+					return fail("a wildcard must be a whole path segment")
+				}
 			}
 			location = r.Path
 		case KindArtifact:
@@ -123,6 +155,16 @@ func Parse(data []byte) (Cleanup, error) {
 		locations[location] = true
 	}
 	return c, nil
+}
+
+// AreaTitle returns the display title of an area ID.
+func (c Cleanup) AreaTitle(id string) string {
+	for _, a := range c.Areas {
+		if a.ID == id {
+			return a.Title
+		}
+	}
+	return ""
 }
 
 // CategoryTitle returns the display title of a category ID.

@@ -15,10 +15,10 @@ var updateGolden = flag.Bool("update", false, "rewrite golden files")
 func TestRuleSetMatchesGolden(t *testing.T) {
 	var b strings.Builder
 	for _, p := range Presets {
-		fmt.Fprintf(&b, "preset\t%s\t%s\t%t\t%s\t%s\n", p.Source, p.Path, p.ExpandChildren, p.Category, p.Safety)
+		fmt.Fprintf(&b, "preset\t%s\t%s\t%t\t%s\t%s\t%s\trebuildable=%t\t%s\n", p.Source, p.Path, p.ExpandChildren, p.Category, p.Safety, p.Area, p.Rebuildable, strings.Join(p.Processes, ","))
 	}
 	for _, p := range ProjectArtifactPatterns {
-		fmt.Fprintf(&b, "artifact\t%s\t%s\t%s\n", p.Name, p.Category, p.Safety)
+		fmt.Fprintf(&b, "artifact\t%s\t%s\t%s\t%s\trebuildable=%t\n", p.Name, p.Category, p.Safety, p.Area, p.Rebuildable)
 	}
 	for _, r := range DefaultProjectRoots {
 		fmt.Fprintf(&b, "root\t%s\n", r)

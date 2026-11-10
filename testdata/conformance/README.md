@@ -14,7 +14,7 @@ size floor and compares the candidates that the scan reports.
 | `name` | Short name, shown when the case fails |
 | `projectRoots` | Project roots for the scan, as `~/` templates. Empty: no project scan. |
 | `files` | Files to make, as paths relative to the home directory, each with a size in bytes |
-| `expect` | The complete set of candidates: the path relative to the home directory, the rule ID, the category ID and the safety tier |
+| `expect` | The complete set of candidates: the path relative to the home directory, the rule ID, the category ID, the safety tier and the area |
 
 A case contains only behavior that the two products agree on. A known
 difference goes into `SYNC.md` of the app repository, not into a case.

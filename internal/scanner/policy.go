@@ -85,11 +85,19 @@ func ruleAllows(it Item) bool {
 		case "library-caches", "library-logs", "xdg-cache", "trash", "rustup", "pnpm-store", "maven-cache":
 			continue
 		}
-		root, err := Physical(p.Path)
-		if err != nil {
+		template, ok := expandHome(p.Path)
+		if !ok {
 			continue
 		}
-		if (!p.ExpandChildren && it.Path == root) || (p.ExpandChildren && filepath.Dir(it.Path) == root) {
+		target := it.Path
+		if p.ExpandChildren {
+			target = filepath.Dir(it.Path)
+		}
+		// Resolve the parents of a wildcard location as the scan did.
+		if physical, err := Physical(template); err == nil {
+			template = physical
+		}
+		if matchTemplate(template, target) {
 			return true
 		}
 	}
