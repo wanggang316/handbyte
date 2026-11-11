@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
@@ -79,7 +79,7 @@ jobs:
   build:
     needs: verify
     name: build ${{ matrix.goarch }}
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
     strategy:
       matrix:
